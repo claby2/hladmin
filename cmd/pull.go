@@ -30,6 +30,8 @@ func runPull(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("at least one hostname must be specified or --local flag must be set")
 	}
 
+	// TODO: Reduce repetition between local execution and remote execution
+
 	// Handle local execution if --local flag is set
 	if pullLocal {
 		fmt.Printf("Pulling changes on localhost...\n")

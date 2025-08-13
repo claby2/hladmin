@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,15 +50,16 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 	}
 
+	// TODO: Is it possible to just os.CreateTemp rather than create a new temporary directory?
 	// Create temporary patch file
-	tempDir, err := ioutil.TempDir("", "hladmin-patch-")
+	tempDir, err := os.MkdirTemp("", "hladmin-patch-")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
 
 	patchFile := filepath.Join(tempDir, "changes.patch")
-	if err := ioutil.WriteFile(patchFile, diffOutput, 0644); err != nil {
+	if err := os.WriteFile(patchFile, diffOutput, 0644); err != nil {
 		return fmt.Errorf("failed to write patch file: %v", err)
 	}
 

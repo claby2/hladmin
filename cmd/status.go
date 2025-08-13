@@ -44,6 +44,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	var hosts []hostInfo
 
+	// TODO: Reduce repetition between local execution and remote execution
+
 	// Handle local execution if --local flag is set
 	if statusLocal {
 		info := hostInfo{hostname: "localhost"}
@@ -83,6 +85,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		} else {
 			info.diskUsage = strings.TrimSpace(string(diskOutput))
 		}
+
+		// TODO: free does not exist on macos. Is there a better more platform-agnostic way to do this?
 
 		// Memory usage (simplified)
 		memCmd := exec.Command("bash", "-c", "free | grep '^Mem:' | awk '{printf \"%.0f%%\", $3/$2*100}'")
