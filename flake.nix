@@ -8,11 +8,9 @@
 
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-      in
-      {
-        packages.default = pkgs.buildGoModule rec {
+      let pkgs = nixpkgs.legacyPackages.${system};
+      in {
+        packages.default = pkgs.buildGoModule {
           pname = "hladmin";
           version = "0.1.0";
 
@@ -23,18 +21,13 @@
           meta = with pkgs.lib; {
             description = "Homelab administration tool";
             homepage = "https://github.com/claby2/hladmin";
-            license = licenses.mit;
             maintainers = [ ];
           };
         };
 
         devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            go
-            gopls
-            gotools
-            go-tools
-          ];
+          buildInputs = with pkgs; [ go gopls gotools go-tools ];
         };
       });
 }
+
