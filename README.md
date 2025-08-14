@@ -75,11 +75,8 @@ onix       server     e0e2fb48017f344c180421674f5da20720f923b9  43%   25%  clean
 Execute arbitrary commands on specified hosts with flexible execution modes.
 
 ```bash
-# Execute command sequentially (default)
+# Execute command in parallel (default)
 hladmin exec server1 server2 -- uptime
-
-# Execute command in parallel
-hladmin exec --parallel server1 server2 desktop1 -- df -h /
 
 # Execute interactively (with stdin/stdout/stderr)
 hladmin exec --interactive server1 server2 -- htop
@@ -90,8 +87,7 @@ hladmin exec localhost server1 -- systemctl status nginx
 
 **Flags:**
 
-- `--parallel`: Execute on all hosts concurrently
-- `--interactive`: Execute with direct terminal interaction sequentially (mutually exclusive with `--parallel`)
+- `--interactive`: Execute with direct terminal interaction sequentially
 
 #### rebuild
 
@@ -167,7 +163,7 @@ hladmin rebuild server1 server2
 hladmin status server1 server2 desktop1 laptop1
 
 # Check specific metrics on all hosts
-hladmin exec --parallel server1 server2 desktop1 -- "uptime && free -h"
+hladmin exec server1 server2 desktop1 -- "uptime && free -h"
 ```
 
 **Update all systems:**
@@ -193,11 +189,11 @@ hladmin exec --interactive server1 -- nix-collect-garbage -d
 **Parallel monitoring:**
 
 ```bash
-# Check disk space across all hosts
-hladmin exec --parallel server1 server2 desktop1 -- "df -h / | tail -1"
+# Check disk space across all hosts (parallel by default)
+hladmin exec server1 server2 desktop1 -- "df -h / | tail -1"
 
 # Monitor network connectivity
-hladmin exec --parallel server1 server2 -- ping -c 3 8.8.8.8
+hladmin exec server1 server2 -- ping -c 3 8.8.8.8
 ```
 
 ## Configuration
