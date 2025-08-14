@@ -14,6 +14,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 go build -o hladmin
 ```
 
+### Nix Build
+
+```bash
+nix build
+```
+
 ### Running
 
 ```bash
@@ -24,6 +30,12 @@ go build -o hladmin
 
 ```bash
 go mod tidy
+```
+
+### Development Shell
+
+```bash
+nix develop
 ```
 
 ## Architecture
@@ -73,9 +85,9 @@ Commands support both local and remote execution:
 
 #### Special Command Handling
 
-- **exec**: Requires `--` separator between hosts and command args, manually parses `--local` flag due to `DisableFlagParsing: true`
-- **push-staged**: Creates temporary patch files, only applies to clean git repos
-- **status**: Uses `text/tabwriter` for columnar output, collects system metrics (HOSTCLASS, version, uptime, disk, memory, git status)
+- **exec**: Requires `--` separator between hosts and command args, manually parses `--local` flag due to `DisableFlagParsing: true` (Cobra consumes `--` during flag parsing)
+- **push-staged**: Creates temporary patch files using `os.CreateTemp()`, only applies to clean git repos
+- **status**: Uses modular `commandSpec` architecture with `executeStatusCommand()` for cross-platform system metrics collection
 
 ### Error Handling
 
@@ -85,7 +97,31 @@ Commands continue processing remaining hosts when individual hosts fail, printin
 
 - **Local paths**: Always use `os.Getenv("HOME")` + `filepath.Join()` for cross-platform compatibility
 - **Remote paths**: Use shell variable `$HOME` for SSH command execution
-- **Temporary files**: `push-staged` creates temp directories that are automatically cleaned up
+- **Temporary files**: Use `os.CreateTemp()` with automatic cleanup via `defer`
+
+### Cross-Platform Compatibility
+
+The status command implements cross-platform system monitoring:
+
+- **Memory Usage**: Detects and uses `free` (Linux) or `vm_stat` (macOS) automatically
+- **Version Detection**: Supports both `nixos-version` and `darwin-version` commands
+
+### Modular Architecture
+
+Recent improvements have introduced modular design patterns:
+
+- **commandSpec**: Defines system commands with parsing functions for status collection
+- **executeStatusCommand()**: Unified execution engine for both local and remote commands
+- **DRY Principle**: Common execution patterns extracted into reusable functions (e.g., `executeRebuild()`, `executePull()`, `executeCommand()`)
+
+### Function Naming Conventions
+
+To avoid naming collisions between commands, use descriptive prefixes:
+
+- `executeStatusCommand()` in status.go
+- `executeCommand()` in exec.go (for arbitrary command execution)
+- `executeRebuild()` in rebuild.go
+- `executePull()` in pull.go
 
 ## Homelab Context
 
@@ -96,4 +132,3 @@ The tool manages a homelab consisting of:
 - All systems have `$HOME/nix-config` directory with a `rebuild.sh` script
 - Systems are identified by hostnames and can be accessed via SSH
 - Each system has a `$HOSTCLASS` environment variable indicating its role
-
