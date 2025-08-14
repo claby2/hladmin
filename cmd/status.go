@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -65,11 +66,24 @@ var statusCommands = []commandSpec{
 	},
 	{
 		name:    "memUsage",
-		command: "if command -v free >/dev/null 2>&1; then free | grep '^Mem:' | awk '{printf \"%.0f%%\", $3/$2*100}'; else vm_stat | awk '/^Pages/ {free+=$3; inactive+=$3; wired+=$3; active+=$3} /^Pages free/ {free=$3} /^Pages inactive/ {inactive=$3} /^Pages wired/ {wired=$3} /^Pages active/ {active=$3} END {total=free+inactive+wired+active; used=wired+active; printf \"%.0f%%\", used/total*100}'; fi",
+		command: getMemoryCommand(),
 		parseOutput: func(output string) string {
 			return strings.TrimSpace(output)
 		},
 	},
+}
+
+func getLinuxMemoryCommand() string {
+	return "free | grep '^Mem:' | awk '{printf \"%.0f%%\", $3/$2*100}'"
+}
+
+func getMacOSMemoryCommand() string {
+	return "vm_stat | awk '/^Pages/ {free+=$3; inactive+=$3; wired+=$3; active+=$3} /^Pages free/ {free=$3} /^Pages inactive/ {inactive=$3} /^Pages wired/ {wired=$3} /^Pages active/ {active=$3} END {total=free+inactive+wired+active; used=wired+active; printf \"%.0f%%\", used/total*100}'"
+}
+
+func getMemoryCommand() string {
+	return fmt.Sprintf("if command -v free >/dev/null 2>&1; then %s; else %s; fi",
+		getLinuxMemoryCommand(), getMacOSMemoryCommand())
 }
 
 func executeStatusCommand(cmdSpec commandSpec, isLocal bool, hostname string) string {
@@ -154,16 +168,34 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	var hosts []hostInfo
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
 	// Handle local execution if --local flag is set
 	if statusLocal {
-		hosts = append(hosts, collectHostInfo("localhost", true))
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			info := collectHostInfo("localhost", true)
+			mu.Lock()
+			hosts = append(hosts, info)
+			mu.Unlock()
+		}()
 	}
 
-	// Collect information for remote hosts
+	// Collect information for remote hosts concurrently
 	for _, hostname := range args {
-		hosts = append(hosts, collectHostInfo(hostname, false))
+		wg.Add(1)
+		go func(host string) {
+			defer wg.Done()
+			info := collectHostInfo(host, false)
+			mu.Lock()
+			hosts = append(hosts, info)
+			mu.Unlock()
+		}(hostname)
 	}
+
+	wg.Wait()
 
 	// Print columnar output
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.TabIndent)

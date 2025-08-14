@@ -75,7 +75,7 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		if len(strings.TrimSpace(string(cleanOutput))) != 0 {
+		if strings.TrimSpace(string(cleanOutput)) != "" {
 			fmt.Printf("  Repository is dirty, skipping\n")
 			if dryRun {
 				fmt.Printf("  Would skip due to dirty repo\n")
