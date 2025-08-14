@@ -46,7 +46,32 @@ func ExecuteOnHosts(hosts []string, command string, mode ExecutionMode) error {
 	}
 }
 
+// ExecuteOnHostsWithCapture executes a command on multiple hosts and returns results
+func ExecuteOnHostsWithCapture(hosts []string, command string, mode ExecutionMode) ([]Result, error) {
+	if len(hosts) == 0 {
+		return nil, fmt.Errorf("at least one hostname must be specified")
+	}
+
+	switch mode {
+	case Parallel:
+		return executeParallelWithCapture(hosts, command), nil
+	default: // Sequential
+		return executeSequentialWithCapture(hosts, command), nil
+	}
+}
+
 func executeParallel(hosts []string, command string) error {
+	results := executeParallelWithCapture(hosts, command)
+
+	// Display results in original order
+	for _, result := range results {
+		displayResult(result)
+	}
+
+	return nil
+}
+
+func executeParallelWithCapture(hosts []string, command string) []Result {
 	results := make([]Result, len(hosts))
 	var wg sync.WaitGroup
 
@@ -60,23 +85,25 @@ func executeParallel(hosts []string, command string) error {
 	}
 
 	wg.Wait()
-
-	// Display results in original order
-	for _, result := range results {
-		displayResult(result)
-	}
-
-	return nil
+	return results
 }
 
 func executeSequential(hosts []string, command string) error {
+	results := executeSequentialWithCapture(hosts, command)
+	for _, result := range results {
+		displayResult(result)
+	}
+	return nil
+}
+
+func executeSequentialWithCapture(hosts []string, command string) []Result {
+	results := make([]Result, 0, len(hosts))
 	for _, hostname := range hosts {
 		isLocal := hostname == "localhost"
 		result := executeWithCapture(hostname, command, isLocal)
-		displayResult(result)
+		results = append(results, result)
 	}
-
-	return nil
+	return results
 }
 
 func executeInteractive(hosts []string, command string) error {
@@ -124,7 +151,8 @@ func executeWithInteraction(hostname, command string, isLocal bool) error {
 			return fmt.Errorf("HOME environment variable not set")
 		}
 		nixConfigPath := filepath.Join(homeDir, "nix-config")
-		cmd = exec.Command("bash", "-c", fmt.Sprintf("cd %s && %s", nixConfigPath, command))
+		cmd = exec.Command("bash", "-c", command)
+		cmd.Dir = nixConfigPath
 	} else {
 		cmd = exec.Command("ssh", "-t", hostname, command)
 	}

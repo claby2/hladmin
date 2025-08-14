@@ -27,22 +27,22 @@ func init() {
 
 func runExec(cmd *cobra.Command, args []string) error {
 	// Manually parse flags since DisableFlagParsing is true
-	parallel := false
-	interactive := false
+	isParallel := false
+	isInteractive := false
 	filteredArgs := make([]string, 0, len(args))
 
 	for _, arg := range args {
 		if arg == "--parallel" {
-			parallel = true
+			isParallel = true
 		} else if arg == "--interactive" {
-			interactive = true
+			isInteractive = true
 		} else {
 			filteredArgs = append(filteredArgs, arg)
 		}
 	}
 
 	// Validate mutually exclusive flags
-	if parallel && interactive {
+	if isParallel && isInteractive {
 		return fmt.Errorf("--parallel and --interactive flags cannot be used together")
 	}
 
@@ -73,9 +73,9 @@ func runExec(cmd *cobra.Command, args []string) error {
 
 	// Determine execution mode
 	var mode executor.ExecutionMode
-	if interactive {
+	if isInteractive {
 		mode = executor.Interactive
-	} else if parallel {
+	} else if isParallel {
 		mode = executor.Parallel
 	} else {
 		mode = executor.Sequential

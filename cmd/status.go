@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"text/tabwriter"
 
@@ -33,7 +31,20 @@ func getLinuxMemoryCommand() string {
 }
 
 func getMacOSMemoryCommand() string {
-	return "vm_stat | awk '/^Pages/ {free+=$3; inactive+=$3; wired+=$3; active+=$3} /^Pages free/ {free=$3} /^Pages inactive/ {inactive=$3} /^Pages wired/ {wired=$3} /^Pages active/ {active=$3} END {total=free+inactive+wired+active; used=wired+active; printf \"%.0f%%\", used/total*100}'"
+	return `vm_stat | awk '
+		/^Pages free/ { free = $3 }
+		/^Pages inactive/ { inactive = $3 }
+		/^Pages wired/ { wired = $3 }
+		/^Pages active/ { active = $3 }
+		END {
+			total = free + inactive + wired + active
+			if (total > 0) {
+				used = wired + active
+				printf "%.0f%%", used/total*100
+			} else {
+				print "0%"
+			}
+		}'`
 }
 
 func getMemoryCommand() string {
@@ -81,25 +92,14 @@ func parseCompoundOutput(hostname, output string) hostInfo {
 func collectHostInfo(hosts []string) ([]hostInfo, error) {
 	command := createCompoundStatusCommand()
 
-	var hostInfos []hostInfo
-
-	// Execute compound command on all hosts in parallel
-	// We can't use ExecuteOnHosts directly because it prints results,
-	// but we need to capture and parse them. So we'll use the internal
-	// executeWithCapture approach.
-
-	resultsChan := make(chan executor.Result, len(hosts))
-	for _, hostname := range hosts {
-		go func(host string) {
-			isLocal := host == "localhost"
-			result := executeWithCapture(host, command, isLocal)
-			resultsChan <- result
-		}(hostname)
+	// Execute compound command on all hosts in parallel using executor
+	results, err := executor.ExecuteOnHostsWithCapture(hosts, command, executor.Parallel)
+	if err != nil {
+		return nil, err
 	}
 
-	// Collect results
-	for i := 0; i < len(hosts); i++ {
-		result := <-resultsChan
+	var hostInfos []hostInfo
+	for _, result := range results {
 		if result.Err != nil {
 			// Create error hostInfo
 			hostInfos = append(hostInfos, hostInfo{
@@ -119,29 +119,6 @@ func collectHostInfo(hosts []string) ([]hostInfo, error) {
 	return hostInfos, nil
 }
 
-// executeWithCapture is copied from executor package for direct access
-func executeWithCapture(hostname, command string, isLocal bool) executor.Result {
-	result := executor.Result{Hostname: hostname, Command: command}
-
-	var cmd *exec.Cmd
-	if isLocal {
-		cmd = exec.Command("bash", "-c", command)
-	} else {
-		cmd = exec.Command("ssh", hostname, command)
-	}
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		result.Err = fmt.Errorf("error executing on %s: %v", hostname, err)
-	}
-
-	result.Stdout = stdout.String()
-	result.Stderr = stderr.String()
-	return result
-}
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	// Validate that at least one host is specified
