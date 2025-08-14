@@ -22,6 +22,27 @@ var execCmd = &cobra.Command{
 	RunE:                  runExec,
 }
 
+func executeCommand(hostname, command string, isLocal bool) error {
+	fmt.Printf("Executing on %s: %s\n", hostname, command)
+
+	var execCmd *exec.Cmd
+	if isLocal {
+		execCmd = exec.Command("bash", "-c", command)
+	} else {
+		execCmd = exec.Command("ssh", hostname, command)
+	}
+
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
+
+	if err := execCmd.Run(); err != nil {
+		return fmt.Errorf("error executing on %s: %v", hostname, err)
+	}
+
+	fmt.Printf("Successfully executed on %s\n", hostname)
+	return nil
+}
+
 func runExec(cmd *cobra.Command, args []string) error {
 	// Manually parse --local flag since we disabled flag parsing
 	localFlag := false
@@ -65,33 +86,17 @@ func runExec(cmd *cobra.Command, args []string) error {
 
 	// Handle local execution if --local flag is set
 	if localFlag {
-		fmt.Printf("Executing on localhost: %s\n", command)
-
-		execCmd := exec.Command("bash", "-c", command)
-		execCmd.Stdout = os.Stdout
-		execCmd.Stderr = os.Stderr
-
-		if err := execCmd.Run(); err != nil {
-			fmt.Printf("Error executing on localhost: %v\n", err)
-		} else {
-			fmt.Printf("Successfully executed on localhost\n")
+		if err := executeCommand("localhost", command, true); err != nil {
+			fmt.Printf("%v\n", err)
 		}
 	}
 
 	// Handle remote hosts
 	for _, hostname := range hostnames {
-		fmt.Printf("Executing on %s: %s\n", hostname, command)
-
-		execCmd := exec.Command("ssh", hostname, command)
-		execCmd.Stdout = os.Stdout
-		execCmd.Stderr = os.Stderr
-
-		if err := execCmd.Run(); err != nil {
-			fmt.Printf("Error executing on %s: %v\n", hostname, err)
+		if err := executeCommand(hostname, command, false); err != nil {
+			fmt.Printf("%v\n", err)
 			continue
 		}
-
-		fmt.Printf("Successfully executed on %s\n", hostname)
 	}
 
 	return nil

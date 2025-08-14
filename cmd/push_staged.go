@@ -50,18 +50,18 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 	}
 
-	// TODO: Is it possible to just os.CreateTemp rather than create a new temporary directory?
 	// Create temporary patch file
-	tempDir, err := os.MkdirTemp("", "hladmin-patch-")
+	patchFile, err := os.CreateTemp("", "hladmin-patch-*.patch")
 	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %v", err)
+		return fmt.Errorf("failed to create temp file: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer os.Remove(patchFile.Name())
+	defer patchFile.Close()
 
-	patchFile := filepath.Join(tempDir, "changes.patch")
-	if err := os.WriteFile(patchFile, diffOutput, 0644); err != nil {
+	if _, err := patchFile.Write(diffOutput); err != nil {
 		return fmt.Errorf("failed to write patch file: %v", err)
 	}
+	patchFile.Close()
 
 	// Process each host
 	for _, hostname := range args {
@@ -92,7 +92,7 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 		remotePatchFile := "/tmp/hladmin-patch.patch"
 
 		// Copy patch to remote
-		copyCmd := exec.Command("scp", patchFile, fmt.Sprintf("%s:%s", hostname, remotePatchFile))
+		copyCmd := exec.Command("scp", patchFile.Name(), fmt.Sprintf("%s:%s", hostname, remotePatchFile))
 		if err := copyCmd.Run(); err != nil {
 			fmt.Printf("  Error copying patch: %v\n", err)
 			continue
