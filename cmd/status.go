@@ -1,14 +1,14 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-	"sync"
 	"text/tabwriter"
 
+	"github.com/claby2/hladmin/internal/executor"
 	"github.com/spf13/cobra"
 )
 
@@ -28,43 +28,6 @@ type hostInfo struct {
 	gitStatus string
 }
 
-type commandSpec struct {
-	name        string
-	command     string
-	parseOutput func(string) string
-}
-
-var statusCommands = []commandSpec{
-	{
-		name:    "hostclass",
-		command: "echo $HOSTCLASS",
-		parseOutput: func(output string) string {
-			return strings.TrimSpace(output)
-		},
-	},
-	{
-		name:    "version",
-		command: "nixos-version --configuration-revision 2>/dev/null || darwin-version --configuration-revision 2>/dev/null || echo 'unknown'",
-		parseOutput: func(output string) string {
-			return strings.TrimSpace(output)
-		},
-	},
-	{
-		name:    "diskUsage",
-		command: "df -h / | tail -1 | awk '{print $5}'",
-		parseOutput: func(output string) string {
-			return strings.TrimSpace(output)
-		},
-	},
-	{
-		name:    "memUsage",
-		command: getMemoryCommand(),
-		parseOutput: func(output string) string {
-			return strings.TrimSpace(output)
-		},
-	},
-}
-
 func getLinuxMemoryCommand() string {
 	return "free | grep '^Mem:' | awk '{printf \"%.0f%%\", $3/$2*100}'"
 }
@@ -78,79 +41,106 @@ func getMemoryCommand() string {
 		getLinuxMemoryCommand(), getMacOSMemoryCommand())
 }
 
-func executeStatusCommand(cmdSpec commandSpec, isLocal bool, hostname string) string {
-	var cmd *exec.Cmd
-	if isLocal {
-		cmd = exec.Command("bash", "-c", cmdSpec.command)
-	} else {
-		cmd = exec.Command("ssh", hostname, cmdSpec.command)
-	}
-
-	output, err := cmd.Output()
-	if err != nil {
-		return "error"
-	}
-	return cmdSpec.parseOutput(string(output))
+func createCompoundStatusCommand() string {
+	memCmd := getMemoryCommand()
+	return fmt.Sprintf(`
+echo -n "$HOSTCLASS|||" && \
+echo -n "$(nixos-version --configuration-revision 2>/dev/null || darwin-version --configuration-revision 2>/dev/null || echo 'unknown')|||" && \
+echo -n "$(df -h / | tail -1 | awk '{print $5}')|||" && \
+echo -n "$(%s)|||" && \
+echo -n "$(cd $HOME/nix-config 2>/dev/null && if [ "$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')" = "0" ]; then echo 'clean'; else echo 'dirty'; fi || echo 'error')" && \
+echo
+`, memCmd)
 }
 
-func getGitStatus(isLocal bool, hostname string, nixConfigPath string) string {
-	if isLocal && nixConfigPath != "" {
-		gitCmd := exec.Command("git", "status", "--porcelain")
-		gitCmd.Dir = nixConfigPath
-		gitOutput, err := gitCmd.Output()
-		if err != nil {
-			return "error"
-		}
-		gitStatus := strings.TrimSpace(string(gitOutput))
-		if gitStatus == "" {
-			return "clean"
-		}
-		return "dirty"
-	} else if !isLocal {
-		gitCmd := exec.Command("ssh", hostname, "cd $HOME/nix-config && git status --porcelain")
-		gitOutput, err := gitCmd.Output()
-		if err != nil {
-			return "error"
-		}
-		gitStatus := strings.TrimSpace(string(gitOutput))
-		if gitStatus == "" {
-			return "clean"
-		}
-		return "dirty"
-	}
-	return "error"
-}
-
-func collectHostInfo(hostname string, isLocal bool) hostInfo {
+func parseCompoundOutput(hostname, output string) hostInfo {
 	info := hostInfo{hostname: hostname}
 
-	var nixConfigPath string
-	if isLocal {
-		homeDir := os.Getenv("HOME")
-		if homeDir != "" {
-			nixConfigPath = filepath.Join(homeDir, "nix-config")
-		}
+	// Split by delimiter
+	parts := strings.Split(strings.TrimSpace(output), "|||")
+
+	// If we don't get exactly 5 parts, return error values
+	if len(parts) != 5 {
+		info.hostclass = "error"
+		info.version = "error"
+		info.diskUsage = "error"
+		info.memUsage = "error"
+		info.gitStatus = "error"
+		return info
 	}
 
-	// Execute all status commands using the modular approach
-	for _, cmdSpec := range statusCommands {
-		result := executeStatusCommand(cmdSpec, isLocal, hostname)
-		switch cmdSpec.name {
-		case "hostclass":
-			info.hostclass = result
-		case "version":
-			info.version = result
-		case "diskUsage":
-			info.diskUsage = result
-		case "memUsage":
-			info.memUsage = result
-		}
-	}
-
-	// Handle git status separately as it has special logic
-	info.gitStatus = getGitStatus(isLocal, hostname, nixConfigPath)
+	info.hostclass = strings.TrimSpace(parts[0])
+	info.version = strings.TrimSpace(parts[1])
+	info.diskUsage = strings.TrimSpace(parts[2])
+	info.memUsage = strings.TrimSpace(parts[3])
+	info.gitStatus = strings.TrimSpace(parts[4])
 
 	return info
+}
+
+func collectHostInfo(hosts []string) ([]hostInfo, error) {
+	command := createCompoundStatusCommand()
+
+	var hostInfos []hostInfo
+
+	// Execute compound command on all hosts in parallel
+	// We can't use ExecuteOnHosts directly because it prints results,
+	// but we need to capture and parse them. So we'll use the internal
+	// executeWithCapture approach.
+
+	resultsChan := make(chan executor.Result, len(hosts))
+	for _, hostname := range hosts {
+		go func(host string) {
+			isLocal := host == "localhost"
+			result := executeWithCapture(host, command, isLocal)
+			resultsChan <- result
+		}(hostname)
+	}
+
+	// Collect results
+	for i := 0; i < len(hosts); i++ {
+		result := <-resultsChan
+		if result.Err != nil {
+			// Create error hostInfo
+			hostInfos = append(hostInfos, hostInfo{
+				hostname:  result.Hostname,
+				hostclass: "error",
+				version:   "error",
+				diskUsage: "error",
+				memUsage:  "error",
+				gitStatus: "error",
+			})
+		} else {
+			// Parse the compound output
+			hostInfos = append(hostInfos, parseCompoundOutput(result.Hostname, result.Stdout))
+		}
+	}
+
+	return hostInfos, nil
+}
+
+// executeWithCapture is copied from executor package for direct access
+func executeWithCapture(hostname, command string, isLocal bool) executor.Result {
+	result := executor.Result{Hostname: hostname, Command: command}
+
+	var cmd *exec.Cmd
+	if isLocal {
+		cmd = exec.Command("bash", "-c", command)
+	} else {
+		cmd = exec.Command("ssh", hostname, command)
+	}
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		result.Err = fmt.Errorf("error executing on %s: %v", hostname, err)
+	}
+
+	result.Stdout = stdout.String()
+	result.Stderr = stderr.String()
+	return result
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
@@ -159,24 +149,11 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("at least one hostname must be specified")
 	}
 
-	var hosts []hostInfo
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	// Collect information for all hosts concurrently
-	for _, hostname := range args {
-		wg.Add(1)
-		go func(host string) {
-			defer wg.Done()
-			isLocal := host == "localhost"
-			info := collectHostInfo(host, isLocal)
-			mu.Lock()
-			hosts = append(hosts, info)
-			mu.Unlock()
-		}(hostname)
+	// Collect information for all hosts using optimized compound command
+	hosts, err := collectHostInfo(args)
+	if err != nil {
+		return err
 	}
-
-	wg.Wait()
 
 	// Print columnar output
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.TabIndent)
