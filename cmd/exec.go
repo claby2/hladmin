@@ -1,16 +1,15 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
-	"os/exec"
 	"strings"
-	"sync"
 
+	"github.com/claby2/hladmin/internal/executor"
 	"github.com/spf13/cobra"
 )
 
 var execParallel bool
+var execInteractive bool
 
 var execCmd = &cobra.Command{
 	Use:                   "exec [hostname1] [hostname2] [hostname3] ... -- <command> [args...]",
@@ -23,93 +22,28 @@ var execCmd = &cobra.Command{
 
 func init() {
 	execCmd.Flags().BoolVar(&execParallel, "parallel", false, "Execute commands on hosts concurrently")
-}
-
-type execResult struct {
-	hostname string
-	command  string
-	stdout   string
-	stderr   string
-	err      error
-}
-
-func displayResult(result execResult) {
-	fmt.Printf("Executing on %s: %s\n", result.hostname, result.command)
-
-	if result.stdout != "" {
-		fmt.Print(result.stdout)
-	}
-	if result.stderr != "" {
-		fmt.Print(result.stderr)
-	}
-
-	if result.err != nil {
-		fmt.Printf("%v\n", result.err)
-	} else {
-		fmt.Printf("Successfully executed on %s\n", result.hostname)
-	}
-}
-
-func executeCommandWithCapture(hostname, command string, isLocal bool) execResult {
-	result := execResult{hostname: hostname, command: command}
-
-	execCmd := exec.Command("ssh", hostname, command)
-	if isLocal {
-		execCmd = exec.Command("bash", "-c", command)
-	}
-
-	var stdout, stderr bytes.Buffer
-	execCmd.Stdout = &stdout
-	execCmd.Stderr = &stderr
-
-	if err := execCmd.Run(); err != nil {
-		result.err = fmt.Errorf("error executing on %s: %v", hostname, err)
-	}
-
-	result.stdout = stdout.String()
-	result.stderr = stderr.String()
-	return result
-}
-
-func executeParallel(hostnames []string, command string) {
-	results := make([]execResult, len(hostnames))
-	var wg sync.WaitGroup
-
-	for i, hostname := range hostnames {
-		wg.Add(1)
-		go func(index int, host string) {
-			defer wg.Done()
-			isLocal := host == "localhost"
-			results[index] = executeCommandWithCapture(host, command, isLocal)
-		}(i, hostname)
-	}
-
-	wg.Wait()
-
-	for _, result := range results {
-		displayResult(result)
-	}
-}
-
-func executeSequential(hostnames []string, command string) {
-	for _, hostname := range hostnames {
-		isLocal := hostname == "localhost"
-		result := executeCommandWithCapture(hostname, command, isLocal)
-		displayResult(result)
-	}
+	execCmd.Flags().BoolVar(&execInteractive, "interactive", false, "Execute commands with direct stdin/stdout/stderr")
 }
 
 func runExec(cmd *cobra.Command, args []string) error {
-	// Manually parse --parallel flag since DisableFlagParsing is true
+	// Manually parse flags since DisableFlagParsing is true
 	parallel := false
+	interactive := false
 	filteredArgs := make([]string, 0, len(args))
 
 	for _, arg := range args {
 		if arg == "--parallel" {
 			parallel = true
+		} else if arg == "--interactive" {
+			interactive = true
 		} else {
 			filteredArgs = append(filteredArgs, arg)
 		}
+	}
+
+	// Validate mutually exclusive flags
+	if parallel && interactive {
+		return fmt.Errorf("--parallel and --interactive flags cannot be used together")
 	}
 
 	// Find the -- separator
@@ -122,7 +56,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	if separatorIndex == -1 {
-		return fmt.Errorf("command separator '--' not found. Usage: hladmin exec [--parallel] <hosts...> -- <command> [args...]")
+		return fmt.Errorf("command separator '--' not found. Usage: hladmin exec [--parallel|--interactive] <hosts...> -- <command> [args...]")
 	}
 
 	if separatorIndex == len(filteredArgs)-1 {
@@ -137,11 +71,15 @@ func runExec(cmd *cobra.Command, args []string) error {
 	hostnames := filteredArgs[:separatorIndex]
 	command := strings.Join(filteredArgs[separatorIndex+1:], " ")
 
-	if parallel {
-		executeParallel(hostnames, command)
+	// Determine execution mode
+	var mode executor.ExecutionMode
+	if interactive {
+		mode = executor.Interactive
+	} else if parallel {
+		mode = executor.Parallel
 	} else {
-		executeSequential(hostnames, command)
+		mode = executor.Sequential
 	}
 
-	return nil
+	return executor.ExecuteOnHosts(hostnames, command, mode)
 }
