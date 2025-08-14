@@ -21,29 +21,20 @@ var execCmd = &cobra.Command{
 }
 
 func init() {
-	execCmd.Flags().BoolVar(&execParallel, "parallel", false, "Execute commands on hosts concurrently")
 	execCmd.Flags().BoolVar(&execInteractive, "interactive", false, "Execute commands with direct stdin/stdout/stderr")
 }
 
 func runExec(cmd *cobra.Command, args []string) error {
 	// Manually parse flags since DisableFlagParsing is true
-	isParallel := false
 	isInteractive := false
 	filteredArgs := make([]string, 0, len(args))
 
 	for _, arg := range args {
-		if arg == "--parallel" {
-			isParallel = true
-		} else if arg == "--interactive" {
+		if arg == "--interactive" {
 			isInteractive = true
 		} else {
 			filteredArgs = append(filteredArgs, arg)
 		}
-	}
-
-	// Validate mutually exclusive flags
-	if isParallel && isInteractive {
-		return fmt.Errorf("--parallel and --interactive flags cannot be used together")
 	}
 
 	// Find the -- separator
@@ -56,7 +47,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	if separatorIndex == -1 {
-		return fmt.Errorf("command separator '--' not found. Usage: hladmin exec [--parallel|--interactive] <hosts...> -- <command> [args...]")
+		return fmt.Errorf("command separator '--' not found. Usage: hladmin exec [--interactive] <hosts...> -- <command> [args...]")
 	}
 
 	if separatorIndex == len(filteredArgs)-1 {
@@ -72,14 +63,20 @@ func runExec(cmd *cobra.Command, args []string) error {
 	command := strings.Join(filteredArgs[separatorIndex+1:], " ")
 
 	// Determine execution mode
-	var mode executor.ExecutionMode
 	if isInteractive {
-		mode = executor.Interactive
-	} else if isParallel {
-		mode = executor.Parallel
+		if err := executor.ExecuteOnHostsInteractive(hostnames, command); err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return nil
+		}
 	} else {
-		mode = executor.Sequential
+		var results []executor.Result
+		results, err := executor.ExecuteOnHostsParallel(hostnames, command)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return nil
+		}
+		executor.DisplayResults(results)
 	}
 
-	return executor.ExecuteOnHosts(hostnames, command, mode)
+	return nil
 }

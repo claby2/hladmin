@@ -93,7 +93,7 @@ func collectHostInfo(hosts []string) ([]hostInfo, error) {
 	command := createCompoundStatusCommand()
 
 	// Execute compound command on all hosts in parallel using executor
-	results, err := executor.ExecuteOnHostsWithCapture(hosts, command, executor.Parallel)
+	results, err := executor.ExecuteOnHostsParallel(hosts, command)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,6 @@ func collectHostInfo(hosts []string) ([]hostInfo, error) {
 
 	return hostInfos, nil
 }
-
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	// Validate that at least one host is specified

@@ -2,23 +2,12 @@ package executor
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"strings"
 	"sync"
-)
-
-// ExecutionMode defines how commands are executed
-type ExecutionMode int
-
-const (
-	// Sequential executes commands one host at a time with captured output
-	Sequential ExecutionMode = iota
-	// Parallel executes commands on multiple hosts concurrently with captured output
-	Parallel
-	// Interactive executes commands one host at a time with direct stdin/stdout/stderr
-	Interactive
 )
 
 // Result represents the result of command execution on a single host
@@ -30,103 +19,58 @@ type Result struct {
 	Err      error
 }
 
-// ExecuteOnHosts executes a command on multiple hosts with specified execution mode
-func ExecuteOnHosts(hosts []string, command string, mode ExecutionMode) error {
+func ExecuteOnHostsInteractive(hosts []string, command string) error {
 	if len(hosts) == 0 {
-		return fmt.Errorf("at least one hostname must be specified")
+		return errors.New("at least one hostname must be specified")
+	}
+	if strings.TrimSpace(command) == "" {
+		return errors.New("command cannot be empty")
 	}
 
-	switch mode {
-	case Parallel:
-		return executeParallel(hosts, command)
-	case Interactive:
-		return executeInteractive(hosts, command)
-	default: // Sequential
-		return executeSequential(hosts, command)
+	for _, hostname := range hosts {
+		isLocal := hostname == "localhost"
+		executeInteractive(hostname, command, isLocal)
 	}
-}
-
-// ExecuteOnHostsWithCapture executes a command on multiple hosts and returns results
-func ExecuteOnHostsWithCapture(hosts []string, command string, mode ExecutionMode) ([]Result, error) {
-	if len(hosts) == 0 {
-		return nil, fmt.Errorf("at least one hostname must be specified")
-	}
-
-	switch mode {
-	case Parallel:
-		return executeParallelWithCapture(hosts, command), nil
-	default: // Sequential
-		return executeSequentialWithCapture(hosts, command), nil
-	}
-}
-
-func executeParallel(hosts []string, command string) error {
-	results := executeParallelWithCapture(hosts, command)
-
-	// Display results in original order
-	for _, result := range results {
-		displayResult(result)
-	}
-
 	return nil
 }
 
-func executeParallelWithCapture(hosts []string, command string) []Result {
+func ExecuteOnHostsParallel(hosts []string, command string) ([]Result, error) {
+	if len(hosts) == 0 {
+		return nil, errors.New("at least one hostname must be specified")
+	}
+	if strings.TrimSpace(command) == "" {
+		return nil, errors.New("command cannot be empty")
+	}
+
 	results := make([]Result, len(hosts))
 	var wg sync.WaitGroup
 
 	for i, hostname := range hosts {
 		wg.Add(1)
-		go func(index int, host string) {
+		go func(i int, host string) {
 			defer wg.Done()
 			isLocal := host == "localhost"
-			results[index] = executeWithCapture(host, command, isLocal)
+			results[i] = execute(host, command, isLocal)
 		}(i, hostname)
 	}
-
 	wg.Wait()
-	return results
+
+	return results, nil
 }
 
-func executeSequential(hosts []string, command string) error {
-	results := executeSequentialWithCapture(hosts, command)
+func DisplayResults(results []Result) {
 	for _, result := range results {
 		displayResult(result)
 	}
-	return nil
 }
 
-func executeSequentialWithCapture(hosts []string, command string) []Result {
-	results := make([]Result, 0, len(hosts))
-	for _, hostname := range hosts {
-		isLocal := hostname == "localhost"
-		result := executeWithCapture(hostname, command, isLocal)
-		results = append(results, result)
-	}
-	return results
-}
-
-func executeInteractive(hosts []string, command string) error {
-	for _, hostname := range hosts {
-		isLocal := hostname == "localhost"
-		if err := executeWithInteraction(hostname, command, isLocal); err != nil {
-			fmt.Printf("%v\n", err)
-		}
-	}
-
-	return nil
-}
-
-func executeWithCapture(hostname, command string, isLocal bool) Result {
+func execute(hostname, command string, isLocal bool) Result {
 	result := Result{Hostname: hostname, Command: command}
 
-	var cmd *exec.Cmd
+	cmd := exec.Command("ssh", hostname, command)
 	if isLocal {
 		cmd = exec.Command("bash", "-c", command)
-	} else {
-		cmd = exec.Command("ssh", hostname, command)
 	}
-
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -140,23 +84,13 @@ func executeWithCapture(hostname, command string, isLocal bool) Result {
 	return result
 }
 
-func executeWithInteraction(hostname, command string, isLocal bool) error {
+func executeInteractive(hostname, command string, isLocal bool) error {
 	fmt.Printf("Executing on %s: %s\n", hostname, command)
 
-	var cmd *exec.Cmd
+	cmd := exec.Command("ssh", "-t", hostname, command)
 	if isLocal {
-		// For interactive local commands, handle working directory properly
-		homeDir := os.Getenv("HOME")
-		if homeDir == "" {
-			return fmt.Errorf("HOME environment variable not set")
-		}
-		nixConfigPath := filepath.Join(homeDir, "nix-config")
 		cmd = exec.Command("bash", "-c", command)
-		cmd.Dir = nixConfigPath
-	} else {
-		cmd = exec.Command("ssh", "-t", hostname, command)
 	}
-
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -185,4 +119,3 @@ func displayResult(result Result) {
 		fmt.Printf("Successfully executed on %s\n", result.Hostname)
 	}
 }
-

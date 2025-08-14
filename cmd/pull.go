@@ -19,5 +19,13 @@ func runPull(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("at least one hostname must be specified")
 	}
 	command := "cd $HOME/nix-config && git pull"
-	return executor.ExecuteOnHosts(args, command, executor.Parallel)
+
+	var results []executor.Result
+	results, err := executor.ExecuteOnHostsParallel(args, command)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return nil
+	}
+	executor.DisplayResults(results)
+	return nil
 }

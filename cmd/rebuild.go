@@ -19,5 +19,10 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("at least one hostname must be specified")
 	}
 	command := "cd $HOME/nix-config && ./rebuild.sh"
-	return executor.ExecuteOnHosts(args, command, executor.Interactive)
+
+	if err := executor.ExecuteOnHostsInteractive(args, command); err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return nil
+	}
+	return nil
 }
