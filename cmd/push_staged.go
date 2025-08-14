@@ -31,8 +31,8 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 	}
 	nixConfigPath := filepath.Join(homeDir, "nix-config")
 
-	// Check for staged changes
-	diffCmd := exec.Command("git", "diff", "--cached")
+	// Check for staged changes with --binary flag to handle binary files properly
+	diffCmd := exec.Command("git", "diff", "--cached", "--binary")
 	diffCmd.Dir = nixConfigPath
 	diffOutput, err := diffCmd.Output()
 	if err != nil {
@@ -69,7 +69,7 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 
 		// Check if remote repo is clean
 		cleanCmd := exec.Command("ssh", hostname, "cd $HOME/nix-config && git status --porcelain")
-		cleanOutput, err := cleanCmd.Output()
+		cleanOutput, err := cleanCmd.CombinedOutput()
 		if err != nil {
 			fmt.Printf("  Error checking git status on %s: %v\n", hostname, err)
 			continue
@@ -100,13 +100,20 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		// Apply patch with proper cleanup on both success and failure
-		applyCmd := exec.Command("ssh", hostname, fmt.Sprintf("cd $HOME/nix-config && git apply %s; rm -f %s", remotePatchFile, remotePatchFile))
-		if err := applyCmd.Run(); err != nil {
+		// Apply patch - separate from cleanup to properly check git apply result
+		applyCmd := exec.Command("ssh", hostname, fmt.Sprintf("cd $HOME/nix-config && git apply %s", remotePatchFile))
+		applyOutput, err := applyCmd.CombinedOutput()
+
+		// Always cleanup the remote patch file, regardless of git apply result
+		cleanupCmd := exec.Command("ssh", hostname, fmt.Sprintf("rm -f %s", remotePatchFile))
+		cleanupCmd.Run()
+
+		// Check git apply result after cleanup
+		if err != nil {
 			fmt.Printf("  Error applying patch: %v\n", err)
-			// Ensure cleanup even on failure
-			cleanupCmd := exec.Command("ssh", hostname, fmt.Sprintf("rm -f %s", remotePatchFile))
-			cleanupCmd.Run()
+			if len(applyOutput) > 0 {
+				fmt.Printf("  %s\n", string(applyOutput))
+			}
 			continue
 		}
 
