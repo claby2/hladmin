@@ -9,19 +9,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	rebuildLocal bool
-)
-
 var rebuildCmd = &cobra.Command{
 	Use:   "rebuild [hostname1] [hostname2] [hostname3] ...",
 	Short: "Run rebuild script on specified hosts",
 	Long:  "Execute the rebuild.sh script in $HOME/nix-config on each host",
 	RunE:  runRebuild,
-}
-
-func init() {
-	rebuildCmd.Flags().BoolVar(&rebuildLocal, "local", false, "Include localhost in rebuild operation")
 }
 
 func executeRebuild(hostname string, isLocal bool) error {
@@ -53,23 +45,19 @@ func executeRebuild(hostname string, isLocal bool) error {
 }
 
 func runRebuild(cmd *cobra.Command, args []string) error {
-	// Validate that at least one host is specified or --local is set
-	if len(args) == 0 && !rebuildLocal {
-		return fmt.Errorf("at least one hostname must be specified or --local flag must be set")
+	// Validate that at least one host is specified
+	if len(args) == 0 {
+		return fmt.Errorf("at least one hostname must be specified")
 	}
 
-	// Handle local execution if --local flag is set
-	if rebuildLocal {
-		if err := executeRebuild("localhost", true); err != nil {
-			fmt.Printf("%v\n", err)
-		}
-	}
-
-	// Handle remote hosts
+	// Handle all hosts sequentially
+	// Note: Rebuild operations must be sequential because they may require
+	// interactive input (e.g., sudo password prompts) which cannot be
+	// handled properly with concurrent execution
 	for _, hostname := range args {
-		if err := executeRebuild(hostname, false); err != nil {
+		isLocal := hostname == "localhost"
+		if err := executeRebuild(hostname, isLocal); err != nil {
 			fmt.Printf("%v\n", err)
-			continue
 		}
 	}
 

@@ -12,19 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	statusLocal bool
-)
-
 var statusCmd = &cobra.Command{
 	Use:   "status [hostname1] [hostname2] [hostname3] ...",
 	Short: "Show status information for specified hosts",
 	Long:  "Display HOSTCLASS, configuration revision, and other useful system information",
 	RunE:  runStatus,
-}
-
-func init() {
-	statusCmd.Flags().BoolVar(&statusLocal, "local", false, "Include localhost in status check")
 }
 
 type hostInfo struct {
@@ -162,33 +154,22 @@ func collectHostInfo(hostname string, isLocal bool) hostInfo {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	// Validate that at least one host is specified or --local is set
-	if len(args) == 0 && !statusLocal {
-		return fmt.Errorf("at least one hostname must be specified or --local flag must be set")
+	// Validate that at least one host is specified
+	if len(args) == 0 {
+		return fmt.Errorf("at least one hostname must be specified")
 	}
 
 	var hosts []hostInfo
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	// Handle local execution if --local flag is set
-	if statusLocal {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			info := collectHostInfo("localhost", true)
-			mu.Lock()
-			hosts = append(hosts, info)
-			mu.Unlock()
-		}()
-	}
-
-	// Collect information for remote hosts concurrently
+	// Collect information for all hosts concurrently
 	for _, hostname := range args {
 		wg.Add(1)
 		go func(host string) {
 			defer wg.Done()
-			info := collectHostInfo(host, false)
+			isLocal := host == "localhost"
+			info := collectHostInfo(host, isLocal)
 			mu.Lock()
 			hosts = append(hosts, info)
 			mu.Unlock()

@@ -1,20 +1,19 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 )
 
-var (
-	execLocal bool
-)
+var execParallel bool
 
 var execCmd = &cobra.Command{
-	Use:                   "exec [--local] [hostname1] [hostname2] [hostname3] ... -- <command> [args...]",
+	Use:                   "exec [hostname1] [hostname2] [hostname3] ... -- <command> [args...]",
 	Short:                 "Execute command on specified hosts",
 	Long:                  "Run the specified command with arguments on each host",
 	DisableFlagParsing:    true,
@@ -22,35 +21,92 @@ var execCmd = &cobra.Command{
 	RunE:                  runExec,
 }
 
-func executeCommand(hostname, command string, isLocal bool) error {
-	fmt.Printf("Executing on %s: %s\n", hostname, command)
+func init() {
+	execCmd.Flags().BoolVar(&execParallel, "parallel", false, "Execute commands on hosts concurrently")
+}
 
-	var execCmd *exec.Cmd
+type execResult struct {
+	hostname string
+	command  string
+	stdout   string
+	stderr   string
+	err      error
+}
+
+func displayResult(result execResult) {
+	fmt.Printf("Executing on %s: %s\n", result.hostname, result.command)
+
+	if result.stdout != "" {
+		fmt.Print(result.stdout)
+	}
+	if result.stderr != "" {
+		fmt.Print(result.stderr)
+	}
+
+	if result.err != nil {
+		fmt.Printf("%v\n", result.err)
+	} else {
+		fmt.Printf("Successfully executed on %s\n", result.hostname)
+	}
+}
+
+func executeCommandWithCapture(hostname, command string, isLocal bool) execResult {
+	result := execResult{hostname: hostname, command: command}
+
+	execCmd := exec.Command("ssh", hostname, command)
 	if isLocal {
 		execCmd = exec.Command("bash", "-c", command)
-	} else {
-		execCmd = exec.Command("ssh", hostname, command)
 	}
 
-	execCmd.Stdout = os.Stdout
-	execCmd.Stderr = os.Stderr
+	var stdout, stderr bytes.Buffer
+	execCmd.Stdout = &stdout
+	execCmd.Stderr = &stderr
 
 	if err := execCmd.Run(); err != nil {
-		return fmt.Errorf("error executing on %s: %v", hostname, err)
+		result.err = fmt.Errorf("error executing on %s: %v", hostname, err)
 	}
 
-	fmt.Printf("Successfully executed on %s\n", hostname)
-	return nil
+	result.stdout = stdout.String()
+	result.stderr = stderr.String()
+	return result
+}
+
+func executeParallel(hostnames []string, command string) {
+	results := make([]execResult, len(hostnames))
+	var wg sync.WaitGroup
+
+	for i, hostname := range hostnames {
+		wg.Add(1)
+		go func(index int, host string) {
+			defer wg.Done()
+			isLocal := host == "localhost"
+			results[index] = executeCommandWithCapture(host, command, isLocal)
+		}(i, hostname)
+	}
+
+	wg.Wait()
+
+	for _, result := range results {
+		displayResult(result)
+	}
+}
+
+func executeSequential(hostnames []string, command string) {
+	for _, hostname := range hostnames {
+		isLocal := hostname == "localhost"
+		result := executeCommandWithCapture(hostname, command, isLocal)
+		displayResult(result)
+	}
 }
 
 func runExec(cmd *cobra.Command, args []string) error {
-	// Manually parse --local flag since we disabled flag parsing
-	localFlag := false
-	var filteredArgs []string
+	// Manually parse --parallel flag since DisableFlagParsing is true
+	parallel := false
+	filteredArgs := make([]string, 0, len(args))
 
 	for _, arg := range args {
-		if arg == "--local" {
-			localFlag = true
+		if arg == "--parallel" {
+			parallel = true
 		} else {
 			filteredArgs = append(filteredArgs, arg)
 		}
@@ -66,37 +122,25 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	if separatorIndex == -1 {
-		return fmt.Errorf("command separator '--' not found. Usage: hladmin exec [--local] <hosts...> -- <command> [args...]")
+		return fmt.Errorf("command separator '--' not found. Usage: hladmin exec [--parallel] <hosts...> -- <command> [args...]")
 	}
 
 	if separatorIndex == len(filteredArgs)-1 {
 		return fmt.Errorf("no command specified after '--'")
 	}
 
-	// Validate that at least one host is specified or --local is set
-	if separatorIndex == 0 && !localFlag {
-		return fmt.Errorf("at least one hostname must be specified or --local flag must be set")
+	// Validate that at least one host is specified
+	if separatorIndex == 0 {
+		return fmt.Errorf("at least one hostname must be specified")
 	}
 
-	var hostnames []string
-	if separatorIndex > 0 {
-		hostnames = filteredArgs[:separatorIndex]
-	}
+	hostnames := filteredArgs[:separatorIndex]
 	command := strings.Join(filteredArgs[separatorIndex+1:], " ")
 
-	// Handle local execution if --local flag is set
-	if localFlag {
-		if err := executeCommand("localhost", command, true); err != nil {
-			fmt.Printf("%v\n", err)
-		}
-	}
-
-	// Handle remote hosts
-	for _, hostname := range hostnames {
-		if err := executeCommand(hostname, command, false); err != nil {
-			fmt.Printf("%v\n", err)
-			continue
-		}
+	if parallel {
+		executeParallel(hostnames, command)
+	} else {
+		executeSequential(hostnames, command)
 	}
 
 	return nil

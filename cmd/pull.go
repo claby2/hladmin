@@ -1,16 +1,14 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 
 	"github.com/spf13/cobra"
-)
-
-var (
-	pullLocal bool
 )
 
 var pullCmd = &cobra.Command{
@@ -20,18 +18,22 @@ var pullCmd = &cobra.Command{
 	RunE:  runPull,
 }
 
-func init() {
-	pullCmd.Flags().BoolVar(&pullLocal, "local", false, "Include localhost in pull operation")
+type pullResult struct {
+	hostname string
+	stdout   string
+	stderr   string
+	err      error
 }
 
-func executePull(hostname string, isLocal bool) error {
-	fmt.Printf("Pulling changes on %s...\n", hostname)
+func executePull(hostname string, isLocal bool) pullResult {
+	result := pullResult{hostname: hostname}
 
 	var pullCmd *exec.Cmd
 	if isLocal {
 		homeDir := os.Getenv("HOME")
 		if homeDir == "" {
-			return fmt.Errorf("HOME environment variable not set")
+			result.err = fmt.Errorf("HOME environment variable not set")
+			return result
 		}
 		nixConfigPath := filepath.Join(homeDir, "nix-config")
 		pullCmd = exec.Command("git", "pull")
@@ -41,35 +43,55 @@ func executePull(hostname string, isLocal bool) error {
 		pullCmd = exec.Command("ssh", hostname, "cd $HOME/nix-config && git pull")
 	}
 
-	pullCmd.Stdout = os.Stdout
-	pullCmd.Stderr = os.Stderr
+	var stdout, stderr bytes.Buffer
+	pullCmd.Stdout = &stdout
+	pullCmd.Stderr = &stderr
 
 	if err := pullCmd.Run(); err != nil {
-		return fmt.Errorf("error pulling on %s: %v", hostname, err)
+		result.err = fmt.Errorf("error pulling on %s: %v", hostname, err)
 	}
 
-	fmt.Printf("Successfully pulled changes on %s\n", hostname)
-	return nil
+	result.stdout = stdout.String()
+	result.stderr = stderr.String()
+	return result
 }
 
 func runPull(cmd *cobra.Command, args []string) error {
-	// Validate that at least one host is specified or --local is set
-	if len(args) == 0 && !pullLocal {
-		return fmt.Errorf("at least one hostname must be specified or --local flag must be set")
+	// Validate that at least one host is specified
+	if len(args) == 0 {
+		return fmt.Errorf("at least one hostname must be specified")
 	}
 
-	// Handle local execution if --local flag is set
-	if pullLocal {
-		if err := executePull("localhost", true); err != nil {
-			fmt.Printf("%v\n", err)
+	// Execute pulls concurrently but maintain ordered output
+	results := make([]pullResult, len(args))
+	var wg sync.WaitGroup
+
+	for i, hostname := range args {
+		wg.Add(1)
+		go func(index int, host string) {
+			defer wg.Done()
+			isLocal := host == "localhost"
+			results[index] = executePull(host, isLocal)
+		}(i, hostname)
+	}
+
+	wg.Wait()
+
+	// Print results in original order with proper sandwiching
+	for _, result := range results {
+		fmt.Printf("Pulling changes on %s...\n", result.hostname)
+
+		if result.stdout != "" {
+			fmt.Print(result.stdout)
 		}
-	}
+		if result.stderr != "" {
+			fmt.Print(result.stderr)
+		}
 
-	// Handle remote hosts
-	for _, hostname := range args {
-		if err := executePull(hostname, false); err != nil {
-			fmt.Printf("%v\n", err)
-			continue
+		if result.err != nil {
+			fmt.Printf("%v\n", result.err)
+		} else {
+			fmt.Printf("Successfully pulled changes on %s\n", result.hostname)
 		}
 	}
 
