@@ -26,8 +26,8 @@ func getConfigDir() string {
 	return filepath.Join(home, ".config", "hladmin")
 }
 
-// getConfigPath returns the full path to the hosts config file
-func getConfigPath() string {
+// GetConfigPath returns the full path to the hosts config file
+func GetConfigPath() string {
 	configDir := getConfigDir()
 	if configDir == "" {
 		return ""
@@ -37,7 +37,7 @@ func getConfigPath() string {
 
 // LoadConfig loads the host configuration from the config file
 func LoadConfig() (*HostConfig, error) {
-	configPath := getConfigPath()
+	configPath := GetConfigPath()
 	if configPath == "" {
 		return &HostConfig{Groups: make(map[string][]string)}, nil
 	}
