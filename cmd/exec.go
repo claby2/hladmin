@@ -12,9 +12,9 @@ var execParallel bool
 var execInteractive bool
 
 var execCmd = &cobra.Command{
-	Use:                   "exec [hostname1] [hostname2] [hostname3] ... -- <command> [args...]",
+	Use:                   hostUsagePattern("exec") + " -- <command> [args...]",
 	Short:                 "Execute command on specified hosts",
-	Long:                  "Run the specified command with arguments on each host",
+	Long:                  hostLongDescription("Run the specified command with arguments on each host."),
 	DisableFlagParsing:    true,
 	DisableFlagsInUseLine: true,
 	RunE:                  runExec,
@@ -54,13 +54,14 @@ func runExec(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no command specified after '--'")
 	}
 
-	// Validate that at least one host is specified
-	if separatorIndex == 0 {
-		return fmt.Errorf("at least one hostname must be specified")
-	}
-
-	hostnames := filteredArgs[:separatorIndex]
+	hostArgs := filteredArgs[:separatorIndex]
 	command := strings.Join(filteredArgs[separatorIndex+1:], " ")
+
+	// Resolve hosts using helper
+	hostnames, err := resolveHosts(hostArgs)
+	if err != nil {
+		return err
+	}
 
 	// Determine execution mode
 	if isInteractive {

@@ -1,0 +1,16 @@
+# Sample hladmin host configuration
+# Place this file at: $XDG_CONFIG_HOME/hladmin/hosts or ~/.config/hladmin/hosts
+
+# Define host groups
+group servers server1 server2 server3
+group desktops desktop1 laptop1
+group all server1 server2 server3 desktop1 laptop1
+
+# Set default group (used when no hosts specified)
+default servers
+
+# Examples of usage after creating this config:
+# hladmin status @servers          # Check status of all servers
+# hladmin exec @desktops -- uptime # Execute command on desktop hosts
+# hladmin status                   # Use default group (servers)
+# hladmin rebuild @all             # Rebuild all hosts

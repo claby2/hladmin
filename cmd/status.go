@@ -11,9 +11,9 @@ import (
 )
 
 var statusCmd = &cobra.Command{
-	Use:   "status [hostname1] [hostname2] [hostname3] ...",
+	Use:   hostUsagePattern("status"),
 	Short: "Show status information for specified hosts",
-	Long:  "Display HOSTCLASS, configuration revision, and other useful system information",
+	Long:  hostLongDescription("Display HOSTCLASS, configuration revision, and other useful system information."),
 	RunE:  runStatus,
 }
 
@@ -120,13 +120,13 @@ func collectHostInfo(hosts []string) ([]hostInfo, error) {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	// Validate that at least one host is specified
-	if len(args) == 0 {
-		return fmt.Errorf("at least one hostname must be specified")
+	hostnames, err := resolveHosts(args)
+	if err != nil {
+		return err
 	}
 
 	// Collect information for all hosts using optimized compound command
-	hosts, err := collectHostInfo(args)
+	hosts, err := collectHostInfo(hostnames)
 	if err != nil {
 		return err
 	}

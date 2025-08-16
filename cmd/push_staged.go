@@ -13,10 +13,9 @@ import (
 var dryRun bool
 
 var pushStagedCmd = &cobra.Command{
-	Use:   "push-staged <hostname1> [hostname2] [hostname3] ...",
+	Use:   hostUsagePattern("push-staged"),
 	Short: "Push staged git changes to specified hosts",
-	Long:  "Check for staged changes in $HOME/nix-config and apply them to clean hosts",
-	Args:  cobra.MinimumNArgs(1),
+	Long:  hostLongDescription("Check for staged changes in $HOME/nix-config and apply them to clean hosts."),
 	RunE:  runPushStaged,
 }
 
@@ -25,6 +24,11 @@ func init() {
 }
 
 func runPushStaged(cmd *cobra.Command, args []string) error {
+	hostnames, err := resolveHosts(args)
+	if err != nil {
+		return err
+	}
+
 	homeDir := os.Getenv("HOME")
 	if homeDir == "" {
 		return fmt.Errorf("HOME environment variable not set")
@@ -64,7 +68,7 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 	patchFile.Close()
 
 	// Process each host
-	for _, hostname := range args {
+	for _, hostname := range hostnames {
 		fmt.Printf("Processing host: %s\n", hostname)
 
 		// Check if remote repo is clean
