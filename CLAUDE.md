@@ -73,6 +73,7 @@ hladmin/
 The `config` package manages host groups and configuration files:
 
 #### Configuration File Format
+
 - **Location**: `$XDG_CONFIG_HOME/hladmin/hosts` or `~/.config/hladmin/hosts`
 - **Syntax**: Line-based format with directives
 - **Group definition**: `group groupname host1 host2 host3`
@@ -80,6 +81,7 @@ The `config` package manages host groups and configuration files:
 - **Comments**: Lines starting with `#` are ignored
 
 #### Host Resolution
+
 - **Individual hosts**: Specified directly by hostname
 - **Group references**: `@groupname` expands to all hosts in group
 - **Default handling**: Empty args use default group if configured
@@ -91,12 +93,14 @@ The `config` package manages host groups and configuration files:
 The `executor` package provides the core execution functionality:
 
 #### Types
+
 - **`Result`**: Represents command execution result with hostname, command, stdout/stderr, and error
 - **`ExecuteOnHostsParallel()`**: Executes commands on multiple hosts concurrently using goroutines
 - **`ExecuteOnHostsInteractive()`**: Executes commands sequentially with stdin/stdout/stderr connected
 - **`DisplayResults()`**: Formats and displays execution results
 
 #### Execution Logic
+
 - **Local execution**: Uses `bash -c "command"` when hostname is `localhost`
 - **Remote execution**: Uses `ssh hostname "command"` for remote hosts
 - **Interactive mode**: Uses `ssh -t hostname "command"` with terminal support
@@ -113,6 +117,7 @@ All commands follow a consistent pattern:
 5. **Error Handling**: Continues processing remaining hosts on individual failures
 
 #### Common Helpers (`cmd/helpers.go`)
+
 - **`hostUsagePattern()`**: Standardized usage text with @group support
 - **`hostLongDescription()`**: Consistent help text mentioning group functionality
 - **`resolveHosts()`**: Central host resolution with config loading and validation
@@ -120,30 +125,35 @@ All commands follow a consistent pattern:
 ### Key Commands
 
 #### exec (`cmd/exec.go`)
+
 - **Purpose**: Execute arbitrary commands on specified hosts
-- **Features**: 
+- **Features**:
   - Supports `--interactive` flag for terminal interaction
   - Uses `--` separator to distinguish hosts from command arguments
   - Manual flag parsing due to `DisableFlagParsing: true`
   - Default parallel execution, sequential when interactive
 
 #### status (`cmd/status.go`)
+
 - **Purpose**: Display system information in tabular format using `text/tabwriter`
-- **Architecture**: 
+- **Architecture**:
   - Compound command execution for efficiency (single SSH call per host)
   - Cross-platform memory detection (Linux `free` vs macOS `vm_stat`)
   - Structured data parsing with `|||` delimiter
   - Parallel collection via executor engine
 
 #### rebuild (`cmd/rebuild.go`)
+
 - **Purpose**: Execute `rebuild.sh` script in `$HOME/nix-config`
 - **Features**: Interactive execution for real-time feedback during system rebuilds
 
 #### pull (`cmd/pull.go`)
+
 - **Purpose**: Execute `git pull` in `$HOME/nix-config`
 - **Features**: Parallel execution for efficiency
 
 #### push-staged (`cmd/push_staged.go`)
+
 - **Purpose**: Push local staged git changes to clean remote repositories
 - **Features**:
   - Creates temporary patch files using `os.CreateTemp()`
@@ -152,6 +162,7 @@ All commands follow a consistent pattern:
   - `--dry-run` flag for testing
 
 #### resolve (`cmd/resolve.go`)
+
 - **Purpose**: Display host configuration and resolve group references
 - **Features**:
   - Shows configuration file location and group definitions
@@ -168,16 +179,18 @@ All commands follow a consistent pattern:
 ### Cross-Platform Support
 
 #### Memory Detection (status command)
+
 ```go
 // Automatically detects and uses appropriate command
-if command -v free >/dev/null 2>&1; then 
+if command -v free >/dev/null 2>&1; then
     free | grep '^Mem:' | awk '{printf "%.0f%%", $3/$2*100}'
-else 
+else
     vm_stat | awk '...' # macOS implementation
 fi
 ```
 
 #### Version Detection
+
 - **NixOS**: Uses `nixos-version --configuration-revision`
 - **macOS**: Uses `darwin-version --configuration-revision`
 - **Fallback**: Returns 'unknown' if neither is available
@@ -233,8 +246,9 @@ This allows using `@servers` instead of listing individual hostnames, and sets `
 ### Function Naming
 
 Use descriptive prefixes to avoid naming collisions:
+
 - `runStatus()` in status.go
-- `runExec()` in exec.go  
+- `runExec()` in exec.go
 - `runRebuild()` in rebuild.go
 - `runResolve()` in resolve.go
 - etc.
@@ -245,3 +259,60 @@ Use descriptive prefixes to avoid naming collisions:
 - Verify both local and remote execution modes
 - Test error conditions and cleanup procedures
 - Validate cross-platform compatibility
+
+## Troubleshooting
+
+### Nix Build Issues
+
+#### Problem: "inconsistent vendoring" Error
+
+**Symptoms:**
+
+```
+go: inconsistent vendoring in /private/tmp/nix-build-hladmin-0.1.0.drv-0/source:
+  github.com/spf13/cobra@v1.8.0: is explicitly required in go.mod, but not marked as explicit in vendor/modules.txt
+  [other modules listed...]
+To sync the vendor directory, run: go mod vendor
+```
+
+**Root Cause:**
+The `vendorHash` in `flake.nix` is outdated and doesn't match the current Go module dependencies. This happens when:
+
+- Go dependencies are added/updated/removed
+- `go mod tidy` changes the module graph
+- The vendor directory is regenerated
+
+**Solution:**
+
+1. **Remove vendor directory** (if present): `rm -rf vendor`
+2. **Update vendorHash in flake.nix** to get the correct hash:
+   - Set `vendorHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";`
+   - Run `nix build` to get the error with correct hash
+   - Update flake.nix with the correct hash from the error message
+   - Run `nix build` again to complete the build
+
+**Example:**
+
+```bash
+# Remove old vendor directory
+rm -rf vendor
+
+# Edit flake.nix to use dummy hash
+# vendorHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+# Build to get correct hash
+nix build
+# Error shows: got: sha256-K66gswCaU2GRdTF6V/Tyysg43o1ZJs+FEcOwvoK5YGk=
+
+# Update flake.nix with correct hash
+# vendorHash = "sha256-K66gswCaU2GRdTF6V/Tyysg43o1ZJs+FEcOwvoK5YGk=";
+
+# Build should now succeed
+nix build
+```
+
+**Prevention:**
+
+- Always update `vendorHash` when Go dependencies change
+- Consider using `vendorHash = null;` for development if frequent dependency changes are expected
+
