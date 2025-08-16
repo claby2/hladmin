@@ -20,7 +20,7 @@ var pushStagedCmd = &cobra.Command{
 }
 
 func init() {
-	pushStagedCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be done without making changes")
+	pushStagedCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be done without making changes")
 }
 
 func runPushStaged(cmd *cobra.Command, args []string) error {

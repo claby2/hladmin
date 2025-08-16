@@ -21,7 +21,7 @@ var execCmd = &cobra.Command{
 }
 
 func init() {
-	execCmd.Flags().BoolVar(&execInteractive, "interactive", false, "Execute commands with direct stdin/stdout/stderr")
+	execCmd.Flags().BoolVarP(&execInteractive, "interactive", "i", false, "Execute commands with direct stdin/stdout/stderr")
 }
 
 func runExec(cmd *cobra.Command, args []string) error {
@@ -30,7 +30,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	filteredArgs := make([]string, 0, len(args))
 
 	for _, arg := range args {
-		if arg == "--interactive" {
+		if arg == "--interactive" || arg == "-i" {
 			isInteractive = true
 		} else {
 			filteredArgs = append(filteredArgs, arg)
@@ -47,7 +47,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	if separatorIndex == -1 {
-		return fmt.Errorf("command separator '--' not found. Usage: hladmin exec [--interactive] <hosts...> -- <command> [args...]")
+		return fmt.Errorf("command separator '--' not found. Usage: hladmin exec [-i|--interactive] <hosts...> -- <command> [args...]")
 	}
 
 	if separatorIndex == len(filteredArgs)-1 {
