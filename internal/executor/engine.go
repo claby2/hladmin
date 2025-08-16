@@ -8,6 +8,9 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/briandowns/spinner"
 )
 
 // Result represents the result of command execution on a single host
@@ -19,12 +22,19 @@ type Result struct {
 	Err      error
 }
 
-func ExecuteOnHostsInteractive(hosts []string, command string) error {
+func verifyHostsAndCommand(hosts []string, command string) error {
 	if len(hosts) == 0 {
 		return errors.New("at least one hostname must be specified")
 	}
 	if strings.TrimSpace(command) == "" {
 		return errors.New("command cannot be empty")
+	}
+	return nil
+}
+
+func ExecuteOnHostsInteractive(hosts []string, command string) error {
+	if err := verifyHostsAndCommand(hosts, command); err != nil {
+		return nil
 	}
 
 	for _, hostname := range hosts {
@@ -35,11 +45,8 @@ func ExecuteOnHostsInteractive(hosts []string, command string) error {
 }
 
 func ExecuteOnHostsParallel(hosts []string, command string) ([]Result, error) {
-	if len(hosts) == 0 {
-		return nil, errors.New("at least one hostname must be specified")
-	}
-	if strings.TrimSpace(command) == "" {
-		return nil, errors.New("command cannot be empty")
+	if err := verifyHostsAndCommand(hosts, command); err != nil {
+		return nil, nil
 	}
 
 	results := make([]Result, len(hosts))
@@ -58,9 +65,70 @@ func ExecuteOnHostsParallel(hosts []string, command string) ([]Result, error) {
 	return results, nil
 }
 
+// ExecuteOnHostsParallelWithProgress executes commands on hosts with optional progress indicator
+func ExecuteOnHostsParallelWithProgress(hosts []string, command string, progressMessage string) ([]Result, error) {
+	if err := verifyHostsAndCommand(hosts, command); err != nil {
+		return nil, nil
+	}
+
+	// Skip progress indicator for single host or when disabled
+	if len(hosts) == 1 {
+		return ExecuteOnHostsParallel(hosts, command)
+	}
+
+	if progressMessage == "" {
+		progressMessage = "Executing on hosts"
+	}
+
+	results := make([]Result, len(hosts))
+	var wg sync.WaitGroup
+	var completedCount int64
+	var mu sync.Mutex
+
+	// Create and start spinner
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Suffix = fmt.Sprintf(" %s... (0/%d hosts)", progressMessage, len(hosts))
+	s.Start()
+
+	for i, hostname := range hosts {
+		wg.Add(1)
+		go func(i int, host string) {
+			defer wg.Done()
+			isLocal := host == "localhost"
+			results[i] = execute(host, command, isLocal)
+
+			// Update progress
+			mu.Lock()
+			completedCount++
+			s.Suffix = fmt.Sprintf(" %s... (%d/%d hosts)", progressMessage, completedCount, len(hosts))
+			mu.Unlock()
+		}(i, hostname)
+	}
+	wg.Wait()
+
+	// Stop spinner and show completion
+	s.Stop()
+	fmt.Printf("✓ %s completed (%d/%d hosts)\n", progressMessage, len(hosts), len(hosts))
+
+	return results, nil
+}
+
 func DisplayResults(results []Result) {
 	for _, result := range results {
-		displayResult(result)
+		fmt.Printf("Executing on %s: %s\n", result.Hostname, result.Command)
+
+		if result.Stdout != "" {
+			fmt.Print(result.Stdout)
+		}
+		if result.Stderr != "" {
+			fmt.Print(result.Stderr)
+		}
+
+		if result.Err != nil {
+			fmt.Printf("%v\n", result.Err)
+		} else {
+			fmt.Printf("Successfully executed on %s\n", result.Hostname)
+		}
 	}
 }
 
@@ -101,21 +169,4 @@ func executeInteractive(hostname, command string, isLocal bool) error {
 
 	fmt.Printf("Successfully executed on %s\n", hostname)
 	return nil
-}
-
-func displayResult(result Result) {
-	fmt.Printf("Executing on %s: %s\n", result.Hostname, result.Command)
-
-	if result.Stdout != "" {
-		fmt.Print(result.Stdout)
-	}
-	if result.Stderr != "" {
-		fmt.Print(result.Stderr)
-	}
-
-	if result.Err != nil {
-		fmt.Printf("%v\n", result.Err)
-	} else {
-		fmt.Printf("Successfully executed on %s\n", result.Hostname)
-	}
 }

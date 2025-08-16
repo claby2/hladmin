@@ -23,7 +23,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 	command := "cd $HOME/nix-config && git pull"
 
 	var results []executor.Result
-	results, err = executor.ExecuteOnHostsParallel(hostnames, command)
+	results, err = executor.ExecuteOnHostsParallelWithProgress(hostnames, command, "Running git pull")
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return nil

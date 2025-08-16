@@ -71,7 +71,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		var results []executor.Result
-		results, err := executor.ExecuteOnHostsParallel(hostnames, command)
+		results, err := executor.ExecuteOnHostsParallelWithProgress(hostnames, command, "Executing command")
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return nil

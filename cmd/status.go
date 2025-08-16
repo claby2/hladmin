@@ -92,8 +92,8 @@ func parseCompoundOutput(hostname, output string) hostInfo {
 func collectHostInfo(hosts []string) ([]hostInfo, error) {
 	command := createCompoundStatusCommand()
 
-	// Execute compound command on all hosts in parallel using executor
-	results, err := executor.ExecuteOnHostsParallel(hosts, command)
+	// Execute compound command on all hosts in parallel using executor with progress
+	results, err := executor.ExecuteOnHostsParallelWithProgress(hosts, command, "Collecting host status")
 	if err != nil {
 		return nil, err
 	}
