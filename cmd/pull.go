@@ -1,17 +1,17 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/claby2/hladmin/internal/executor"
 	"github.com/spf13/cobra"
 )
 
 var pullCmd = &cobra.Command{
-	Use:   hostUsagePattern("pull"),
-	Short: "Run git pull on specified hosts",
-	Long:  hostLongDescription("Execute git pull in $HOME/nix-config on each host."),
-	RunE:  runPull,
+	Use:           hostUsagePattern("pull"),
+	Short:         "Run git pull on specified hosts",
+	Long:          hostLongDescription("Execute git pull in $HOME/nix-config on each host."),
+	RunE:          runPull,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 func runPull(cmd *cobra.Command, args []string) error {
@@ -25,9 +25,11 @@ func runPull(cmd *cobra.Command, args []string) error {
 	var results []executor.Result
 	results, err = executor.ExecuteOnHostsParallelWithProgress(hostnames, command, "Running git pull")
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return nil
+		return err
 	}
 	executor.DisplayResults(results)
+	if err = executor.ResultsError(results); err != nil {
+		return err
+	}
 	return nil
 }

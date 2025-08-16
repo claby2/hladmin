@@ -39,7 +39,9 @@ func ExecuteOnHostsInteractive(hosts []string, command string) error {
 
 	for _, hostname := range hosts {
 		isLocal := hostname == "localhost"
-		executeInteractive(hostname, command, isLocal)
+		if err := executeInteractive(hostname, command, isLocal); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -115,7 +117,7 @@ func ExecuteOnHostsParallelWithProgress(hosts []string, command string, progress
 
 func DisplayResults(results []Result) {
 	for _, result := range results {
-		fmt.Printf("Executing on %s: %s\n", result.Hostname, result.Command)
+		fmt.Printf("=== Executing on %s: %s\n", result.Hostname, result.Command)
 
 		if result.Stdout != "" {
 			fmt.Print(result.Stdout)
@@ -127,9 +129,18 @@ func DisplayResults(results []Result) {
 		if result.Err != nil {
 			fmt.Printf("%v\n", result.Err)
 		} else {
-			fmt.Printf("Successfully executed on %s\n", result.Hostname)
+			fmt.Printf("=== Successfully executed on %s\n", result.Hostname)
 		}
 	}
+}
+
+func ResultsError(results []Result) error {
+	for _, result := range results {
+		if result.Err != nil {
+			return result.Err
+		}
+	}
+	return nil
 }
 
 func execute(hostname, command string, isLocal bool) Result {
@@ -153,7 +164,7 @@ func execute(hostname, command string, isLocal bool) Result {
 }
 
 func executeInteractive(hostname, command string, isLocal bool) error {
-	fmt.Printf("Executing on %s: %s\n", hostname, command)
+	fmt.Printf("=== Executing on %s: %s\n", hostname, command)
 
 	cmd := exec.Command("ssh", "-t", hostname, command)
 	if isLocal {
@@ -167,6 +178,6 @@ func executeInteractive(hostname, command string, isLocal bool) error {
 		return fmt.Errorf("error executing on %s: %v", hostname, err)
 	}
 
-	fmt.Printf("Successfully executed on %s\n", hostname)
+	fmt.Printf("=== ✓ Successfully executed on %s\n", hostname)
 	return nil
 }

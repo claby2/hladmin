@@ -13,10 +13,12 @@ import (
 var dryRun bool
 
 var pushStagedCmd = &cobra.Command{
-	Use:   hostUsagePattern("push-staged"),
-	Short: "Push staged git changes to specified hosts",
-	Long:  hostLongDescription("Check for staged changes in $HOME/nix-config and apply them to clean hosts."),
-	RunE:  runPushStaged,
+	Use:           hostUsagePattern("push-staged"),
+	Short:         "Push staged git changes to specified hosts",
+	Long:          hostLongDescription("Check for staged changes in $HOME/nix-config and apply them to clean hosts."),
+	RunE:          runPushStaged,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 func init() {

@@ -18,6 +18,8 @@ var execCmd = &cobra.Command{
 	DisableFlagParsing:    true,
 	DisableFlagsInUseLine: true,
 	RunE:                  runExec,
+	SilenceUsage:          true,
+	SilenceErrors:         true,
 }
 
 func init() {
@@ -66,17 +68,18 @@ func runExec(cmd *cobra.Command, args []string) error {
 	// Determine execution mode
 	if isInteractive {
 		if err := executor.ExecuteOnHostsInteractive(hostnames, command); err != nil {
-			fmt.Printf("Error: %v\n", err)
-			return nil
+			return err
 		}
 	} else {
 		var results []executor.Result
 		results, err := executor.ExecuteOnHostsParallelWithProgress(hostnames, command, "Executing command")
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			return nil
+			return err
 		}
 		executor.DisplayResults(results)
+		if err = executor.ResultsError(results); err != nil {
+			return err
+		}
 	}
 
 	return nil

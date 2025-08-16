@@ -10,10 +10,12 @@ import (
 )
 
 var resolveCmd = &cobra.Command{
-	Use:   hostUsagePattern("resolve"),
-	Short: "Show host configuration and resolve groups",
-	Long:  hostLongDescription("Show the current host configuration and resolve group references. Without arguments, displays the full configuration including all groups and the default group. With arguments, shows how the specified hosts and groups resolve to individual hostnames."),
-	RunE:  runResolve,
+	Use:           hostUsagePattern("resolve"),
+	Short:         "Show host configuration and resolve groups",
+	Long:          hostLongDescription("Show the current host configuration and resolve group references. Without arguments, displays the full configuration including all groups and the default group. With arguments, shows how the specified hosts and groups resolve to individual hostnames."),
+	RunE:          runResolve,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 func runResolve(cmd *cobra.Command, args []string) error {

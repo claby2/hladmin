@@ -11,10 +11,12 @@ import (
 )
 
 var statusCmd = &cobra.Command{
-	Use:   hostUsagePattern("status"),
-	Short: "Show status information for specified hosts",
-	Long:  hostLongDescription("Display HOSTCLASS, configuration revision, and other useful system information."),
-	RunE:  runStatus,
+	Use:           hostUsagePattern("status"),
+	Short:         "Show status information for specified hosts",
+	Long:          hostLongDescription("Display HOSTCLASS, configuration revision, and other useful system information."),
+	RunE:          runStatus,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 type hostInfo struct {
@@ -95,6 +97,9 @@ func collectHostInfo(hosts []string) ([]hostInfo, error) {
 	// Execute compound command on all hosts in parallel using executor with progress
 	results, err := executor.ExecuteOnHostsParallelWithProgress(hosts, command, "Collecting host status")
 	if err != nil {
+		return nil, err
+	}
+	if err = executor.ResultsError(results); err != nil {
 		return nil, err
 	}
 
