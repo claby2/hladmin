@@ -129,7 +129,7 @@ func DisplayResults(results []Result) {
 		if result.Err != nil {
 			fmt.Printf("%v\n", result.Err)
 		} else {
-			fmt.Printf("=== Successfully executed on %s\n", result.Hostname)
+			fmt.Printf("=== ✓ Successfully executed on %s\n", result.Hostname)
 		}
 	}
 }
