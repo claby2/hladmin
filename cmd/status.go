@@ -23,9 +23,9 @@ type hostInfo struct {
 	hostname  string
 	hostclass string
 	version   string
+	repo      string
 	diskUsage string
 	memUsage  string
-	gitStatus string
 }
 
 func getLinuxMemoryCommand() string {
@@ -59,9 +59,9 @@ func createCompoundStatusCommand() string {
 	return fmt.Sprintf(`
 echo -n "$HOSTCLASS|||" && \
 echo -n "$(nixos-version --configuration-revision 2>/dev/null || darwin-version --configuration-revision 2>/dev/null || echo 'unknown')|||" && \
+echo -n "$(nix flake metadata $HOME/nix-config 2>/dev/null | grep "Revision:" | awk '{print $2}')|||" && \
 echo -n "$(df -h / | tail -1 | awk '{print $5}')|||" && \
-echo -n "$(%s)|||" && \
-echo -n "$(cd $HOME/nix-config 2>/dev/null && if [ "$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')" = "0" ]; then echo 'clean'; else echo 'dirty'; fi || echo 'error')" && \
+echo -n "$(%s)" && \
 echo
 `, memCmd)
 }
@@ -76,17 +76,17 @@ func parseCompoundOutput(hostname, output string) hostInfo {
 	if len(parts) != 5 {
 		info.hostclass = "error"
 		info.version = "error"
+		info.repo = "error"
 		info.diskUsage = "error"
 		info.memUsage = "error"
-		info.gitStatus = "error"
 		return info
 	}
 
 	info.hostclass = strings.TrimSpace(parts[0])
 	info.version = strings.TrimSpace(parts[1])
-	info.diskUsage = strings.TrimSpace(parts[2])
-	info.memUsage = strings.TrimSpace(parts[3])
-	info.gitStatus = strings.TrimSpace(parts[4])
+	info.repo = strings.TrimSpace(parts[2])
+	info.diskUsage = strings.TrimSpace(parts[3])
+	info.memUsage = strings.TrimSpace(parts[4])
 
 	return info
 }
@@ -111,9 +111,9 @@ func collectHostInfo(hosts []string) ([]hostInfo, error) {
 				hostname:  result.Hostname,
 				hostclass: "error",
 				version:   "error",
+				repo:      "error",
 				diskUsage: "error",
 				memUsage:  "error",
-				gitStatus: "error",
 			})
 		} else {
 			// Parse the compound output
@@ -138,16 +138,16 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	// Print columnar output
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.TabIndent)
-	fmt.Fprintf(w, "HOSTNAME\tHOSTCLASS\tVERSION\tDISK\tMEM\tGIT\n")
+	fmt.Fprintf(w, "HOSTNAME\tHOSTCLASS\tVERSION\tREPO\tDISK\tMEM\n")
 
 	for _, host := range hosts {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			host.hostname,
 			host.hostclass,
 			host.version,
+			host.repo,
 			host.diskUsage,
 			host.memUsage,
-			host.gitStatus,
 		)
 	}
 
