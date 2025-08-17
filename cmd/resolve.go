@@ -47,7 +47,9 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve specific arguments
-	showHostResolution(cfg, args)
+	if err := showHostResolution(cfg, args); err != nil {
+		return err
+	}
 
 	return nil
 }
