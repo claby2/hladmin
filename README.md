@@ -64,10 +64,10 @@ hladmin status localhost
 **Example output:**
 
 ```
-HOSTNAME   HOSTCLASS  VERSION                                   DISK  MEM  GIT
-localhost  base       e0e2fb48017f344c180421674f5da20720f923b9  3%    50%  dirty
-altaria    server     e0e2fb48017f344c180421674f5da20720f923b9  17%   46%  clean
-onix       server     e0e2fb48017f344c180421674f5da20720f923b9  43%   25%  clean
+HOSTNAME   HOSTCLASS  VERSION                                   REPO                                      DISK  MEM
+localhost  mac        6f88686d63493d507e6c1e4e47f1e22cab8dac13  6f88686d63493d507e6c1e4e47f1e22cab8dac13  3%    47%
+altaria    server     6f88686d63493d507e6c1e4e47f1e22cab8dac13  6f88686d63493d507e6c1e4e47f1e22cab8dac13  17%   46%
+onix       server     6f88686d63493d507e6c1e4e47f1e22cab8dac13  6f88686d63493d507e6c1e4e47f1e22cab8dac13  43%   25%
 ```
 
 #### exec
@@ -138,6 +138,21 @@ hladmin push-staged --dry-run server1 server2
 
 - `--dry-run`: Show what would be done without making changes
 
+#### resolve
+
+Show host configuration and resolve group references. Displays the current host configuration including group definitions and default group settings.
+
+```bash
+# Show full configuration
+hladmin resolve
+
+# Resolve specific hosts and groups
+hladmin resolve @servers desktop1 @all
+
+# Check what hosts a group contains
+hladmin resolve @servers
+```
+
 ## Examples
 
 ### Common Workflows
@@ -149,31 +164,31 @@ hladmin push-staged --dry-run server1 server2
 git add .
 
 # 2. Push to clean hosts
-hladmin push-staged --dry-run server1 server2  # verify changes
-hladmin push-staged server1 server2            # apply changes
+hladmin push-staged --dry-run @servers  # verify changes
+hladmin push-staged @servers            # apply changes
 
 # 3. Rebuild affected systems
-hladmin rebuild server1 server2
+hladmin rebuild @servers
 ```
 
 **Check system health across homelab:**
 
 ```bash
 # Get comprehensive status overview
-hladmin status server1 server2 desktop1 laptop1
+hladmin status @all
 
 # Check specific metrics on all hosts
-hladmin exec server1 server2 desktop1 -- "uptime && free -h"
+hladmin exec @all -- "uptime && free -h"
 ```
 
 **Update all systems:**
 
 ```bash
 # Pull latest configuration
-hladmin pull server1 server2 desktop1
+hladmin pull @all
 
 # Rebuild all systems
-hladmin rebuild server1 server2 desktop1
+hladmin rebuild @all
 ```
 
 **Interactive troubleshooting:**
@@ -190,13 +205,47 @@ hladmin exec --interactive server1 -- nix-collect-garbage -d
 
 ```bash
 # Check disk space across all hosts (parallel by default)
-hladmin exec server1 server2 desktop1 -- "df -h / | tail -1"
+hladmin exec @all -- "df -h / | tail -1"
 
 # Monitor network connectivity
-hladmin exec server1 server2 -- ping -c 3 8.8.8.8
+hladmin exec @servers -- ping -c 3 8.8.8.8
 ```
 
 ## Configuration
+
+### Host Groups
+
+hladmin supports organizing hosts into groups for easier management. Create a configuration file to define host groups and set defaults.
+
+**Configuration File Location:**
+
+- `$XDG_CONFIG_HOME/hladmin/hosts` or
+- `~/.config/hladmin/hosts`
+
+**Configuration Syntax:**
+
+```bash
+# Define host groups
+group servers server1 server2 server3
+group desktops desktop1 laptop1
+group all server1 server2 server3 desktop1 laptop1
+
+# Set default group (used when no hosts specified)
+default servers
+```
+
+**Using Host Groups:**
+
+```bash
+# Use @group syntax to reference groups
+hladmin status @servers          # Check status of all servers
+hladmin exec @desktops -- uptime # Execute command on desktop hosts
+hladmin status                   # Uses default group (servers in example above)
+hladmin rebuild @all             # Rebuild all hosts
+
+# Groups can be mixed with individual hosts
+hladmin status @servers desktop1 laptop1
+```
 
 ### Host Requirements
 
