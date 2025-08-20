@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/claby2/hladmin/internal/colors"
 	"github.com/spf13/cobra"
 )
 
@@ -46,12 +47,12 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(diffOutput) == 0 {
-		fmt.Println("No staged changes found")
+		fmt.Println(colors.Info.Sprint("No staged changes found"))
 		return nil
 	}
 
 	if dryRun {
-		fmt.Println("Staged changes:")
+		fmt.Println(colors.Header.Sprint("Staged changes:"))
 		fmt.Println(string(diffOutput))
 		fmt.Println()
 	}
@@ -71,26 +72,26 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 
 	// Process each host
 	for _, hostname := range hostnames {
-		fmt.Printf("Processing host: %s\n", hostname)
+		fmt.Printf("%s %s\n", colors.Info.Sprint("Processing host:"), colors.Hostname.Sprint(hostname))
 
 		// Check if remote repo is clean
 		cleanCmd := exec.Command("ssh", hostname, "cd $HOME/nix-config && git status --porcelain")
 		cleanOutput, err := cleanCmd.CombinedOutput()
 		if err != nil {
-			fmt.Printf("  Error checking git status on %s: %v\n", hostname, err)
+			fmt.Printf("  %s\n", colors.Error.Sprintf("Error checking git status on %s: %v", hostname, err))
 			continue
 		}
 
 		if strings.TrimSpace(string(cleanOutput)) != "" {
-			fmt.Printf("  Repository has uncommitted changes, skipping\n")
+			fmt.Printf("  %s\n", colors.Warning.Sprint("Repository has uncommitted changes, skipping"))
 			if dryRun {
-				fmt.Printf("  Would skip due to uncommitted changes\n")
+				fmt.Printf("  %s\n", colors.Secondary.Sprint("Would skip due to uncommitted changes"))
 			}
 			continue
 		}
 
 		if dryRun {
-			fmt.Printf("  Repository is clean, would apply patch\n")
+			fmt.Printf("  %s\n", colors.Success.Sprint("Repository is clean, would apply patch"))
 			continue
 		}
 
@@ -102,7 +103,7 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 		// Copy patch to remote
 		copyCmd := exec.Command("scp", patchFile.Name(), fmt.Sprintf("%s:%s", hostname, remotePatchFile))
 		if err := copyCmd.Run(); err != nil {
-			fmt.Printf("  Error copying patch: %v\n", err)
+			fmt.Printf("  %s\n", colors.Error.Sprintf("Error copying patch: %v", err))
 			continue
 		}
 
@@ -116,14 +117,14 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 
 		// Check git apply result after cleanup
 		if err != nil {
-			fmt.Printf("  Error applying patch: %v\n", err)
+			fmt.Printf("  %s\n", colors.Error.Sprintf("Error applying patch: %v", err))
 			if len(applyOutput) > 0 {
-				fmt.Printf("  %s\n", string(applyOutput))
+				fmt.Printf("  %s\n", colors.Secondary.Sprint(string(applyOutput)))
 			}
 			continue
 		}
 
-		fmt.Printf("  Patch applied successfully\n")
+		fmt.Printf("  %s\n", colors.Success.Sprint("Patch applied successfully"))
 	}
 
 	return nil

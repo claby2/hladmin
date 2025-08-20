@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
+	"github.com/claby2/hladmin/internal/colors"
 )
 
 // Result represents the result of command execution on a single host
@@ -110,14 +111,14 @@ func ExecuteOnHostsParallelWithProgress(hosts []string, command string, progress
 
 	// Stop spinner and show completion
 	s.Stop()
-	fmt.Printf("✓ %s completed (%d/%d hosts)\n", progressMessage, len(hosts), len(hosts))
+	fmt.Printf("%s %s completed (%d/%d hosts)\n", colors.Success.Sprint("✓"), progressMessage, len(hosts), len(hosts))
 
 	return results, nil
 }
 
 func DisplayResults(results []Result) {
 	for _, result := range results {
-		fmt.Printf("=== Executing on %s: %s\n", result.Hostname, result.Command)
+		fmt.Printf("%s Executing on %s: %s\n", colors.Header.Sprint("==="), colors.Hostname.Sprint(result.Hostname), result.Command)
 
 		if result.Stdout != "" {
 			fmt.Print(result.Stdout)
@@ -127,9 +128,9 @@ func DisplayResults(results []Result) {
 		}
 
 		if result.Err != nil {
-			fmt.Printf("%v\n", result.Err)
+			fmt.Printf("%s\n", colors.Error.Sprintf("%v", result.Err))
 		} else {
-			fmt.Printf("=== ✓ Successfully executed on %s\n", result.Hostname)
+			fmt.Printf("%s %s Successfully executed on %s\n", colors.Header.Sprint("==="), colors.Success.Sprint("✓"), colors.Hostname.Sprint(result.Hostname))
 		}
 	}
 }
@@ -164,7 +165,7 @@ func execute(hostname, command string, isLocal bool) Result {
 }
 
 func executeInteractive(hostname, command string, isLocal bool) error {
-	fmt.Printf("=== Executing on %s: %s\n", hostname, command)
+	fmt.Printf("%s Executing on %s: %s\n", colors.Header.Sprint("==="), colors.Hostname.Sprint(hostname), command)
 
 	cmd := exec.Command("ssh", "-t", hostname, command)
 	if isLocal {
@@ -175,9 +176,9 @@ func executeInteractive(hostname, command string, isLocal bool) error {
 	cmd.Stdin = os.Stdin
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("error executing on %s: %v", hostname, err)
+		return fmt.Errorf("%s", colors.Error.Sprintf("error executing on %s: %v", hostname, err))
 	}
 
-	fmt.Printf("=== ✓ Successfully executed on %s\n", hostname)
+	fmt.Printf("%s %s Successfully executed on %s\n", colors.Header.Sprint("==="), colors.Success.Sprint("✓"), colors.Hostname.Sprint(hostname))
 	return nil
 }

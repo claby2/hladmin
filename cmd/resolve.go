@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/claby2/hladmin/internal/colors"
 	"github.com/claby2/hladmin/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -35,9 +36,9 @@ func runResolve(cmd *cobra.Command, args []string) error {
 
 	// Always show config location first
 	if configExists {
-		fmt.Printf("Config: %s\n\n", configPath)
+		fmt.Printf("%s %s\n\n", colors.Info.Sprint("Config:"), configPath)
 	} else {
-		fmt.Printf("Config: No configuration file found (checked %s)\n\n", configPath)
+		fmt.Printf("%s %s (checked %s)\n\n", colors.Info.Sprint("Config:"), colors.Warning.Sprint("No configuration file found"), configPath)
 	}
 
 	// If no arguments, show full configuration
@@ -56,18 +57,18 @@ func runResolve(cmd *cobra.Command, args []string) error {
 
 func showFullConfiguration(cfg *config.HostConfig) {
 	if len(cfg.Groups) == 0 {
-		fmt.Println("No groups defined.")
+		fmt.Println(colors.Warning.Sprint("No groups defined."))
 	} else {
-		fmt.Println("Groups:")
+		fmt.Println(colors.Header.Sprint("Groups:"))
 		for groupName, hosts := range cfg.Groups {
-			fmt.Printf("  %s: %s\n", groupName, strings.Join(hosts, ", "))
+			fmt.Printf("  %s: %s\n", colors.Bold.Sprintf("@%s", groupName), strings.Join(hosts, ", "))
 		}
 		fmt.Println()
 
 		if cfg.DefaultGroup != "" {
-			fmt.Printf("Default Group: %s\n", cfg.DefaultGroup)
+			fmt.Printf("%s %s\n", colors.Info.Sprint("Default Group:"), colors.Bold.Sprint(cfg.DefaultGroup))
 		} else {
-			fmt.Println("Default Group: none")
+			fmt.Printf("%s %s\n", colors.Info.Sprint("Default Group:"), colors.Secondary.Sprint("none"))
 		}
 	}
 }
@@ -83,16 +84,16 @@ func showHostResolution(cfg *config.HostConfig, args []string) error {
 		if strings.HasPrefix(arg, "@") {
 			groupName := arg[1:]
 			if hosts, exists := cfg.Groups[groupName]; exists {
-				fmt.Printf("%s -> %s\n", arg, strings.Join(hosts, ", "))
+				fmt.Printf("%s -> %s\n", colors.Bold.Sprint(arg), strings.Join(hosts, ", "))
 			} else {
-				fmt.Printf("%s -> error: unknown group\n", arg)
+				fmt.Printf("%s -> %s\n", colors.Bold.Sprint(arg), colors.Error.Sprint("error: unknown group"))
 			}
 		} else {
-			fmt.Printf("%s -> %s\n", arg, arg)
+			fmt.Printf("%s -> %s\n", colors.Hostname.Sprint(arg), arg)
 		}
 	}
 
 	fmt.Println()
-	fmt.Printf("Final host list: %s\n", strings.Join(resolvedHosts, ", "))
+	fmt.Printf("%s %s\n", colors.Info.Sprint("Final host list:"), strings.Join(resolvedHosts, ", "))
 	return nil
 }
