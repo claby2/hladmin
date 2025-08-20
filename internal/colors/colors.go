@@ -2,8 +2,6 @@ package colors
 
 import (
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/fatih/color"
 )
@@ -53,25 +51,3 @@ func isTerminal() bool {
 	}
 	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
-
-func ColorizeUsage(usage string) string {
-	if usage == "error" {
-		return Error.Sprint(usage)
-	}
-
-	// Try to parse percentage for disk/memory usage coloring
-	if strings.HasSuffix(usage, "%") {
-		if percent, err := strconv.Atoi(strings.TrimSuffix(usage, "%")); err == nil {
-			if percent >= 90 {
-				return Error.Sprint(usage) // Red for high usage
-			} else if percent >= 70 {
-				return Warning.Sprint(usage) // Yellow for medium usage
-			} else {
-				return Success.Sprint(usage) // Green for low usage
-			}
-		}
-	}
-
-	return usage
-}
-
