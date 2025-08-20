@@ -47,12 +47,12 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(diffOutput) == 0 {
-		fmt.Println(colors.Info.Sprint("No staged changes found"))
+		colors.Info.Println("No staged changes found")
 		return nil
 	}
 
 	if dryRun {
-		fmt.Println(colors.Header.Sprint("Staged changes:"))
+		colors.Header.Println("Staged changes:")
 		fmt.Println(string(diffOutput))
 		fmt.Println()
 	}
@@ -83,15 +83,15 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 		}
 
 		if strings.TrimSpace(string(cleanOutput)) != "" {
-			fmt.Printf("  %s\n", colors.Warning.Sprint("Repository has uncommitted changes, skipping"))
+			colors.Warning.Println("  Repository has uncommitted changes, skipping")
 			if dryRun {
-				fmt.Printf("  %s\n", colors.Secondary.Sprint("Would skip due to uncommitted changes"))
+				colors.Secondary.Println("  Would skip due to uncommitted changes")
 			}
 			continue
 		}
 
 		if dryRun {
-			fmt.Printf("  %s\n", colors.Success.Sprint("Repository is clean, would apply patch"))
+			colors.Success.Println("  Repository is clean, would apply patch")
 			continue
 		}
 
@@ -119,12 +119,12 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			fmt.Printf("  %s\n", colors.Error.Sprintf("Error applying patch: %v", err))
 			if len(applyOutput) > 0 {
-				fmt.Printf("  %s\n", colors.Secondary.Sprint(string(applyOutput)))
+				colors.Secondary.Printf("  %s\n", string(applyOutput))
 			}
 			continue
 		}
 
-		fmt.Printf("  %s\n", colors.Success.Sprint("Patch applied successfully"))
+		colors.Success.Println("  Patch applied successfully")
 	}
 
 	return nil

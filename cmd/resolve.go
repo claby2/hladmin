@@ -57,9 +57,9 @@ func runResolve(cmd *cobra.Command, args []string) error {
 
 func showFullConfiguration(cfg *config.HostConfig) {
 	if len(cfg.Groups) == 0 {
-		fmt.Println(colors.Warning.Sprint("No groups defined."))
+		colors.Warning.Println("No groups defined.")
 	} else {
-		fmt.Println(colors.Header.Sprint("Groups:"))
+		colors.Header.Println("Groups:")
 		for groupName, hosts := range cfg.Groups {
 			fmt.Printf("  %s: %s\n", colors.Bold.Sprintf("@%s", groupName), strings.Join(hosts, ", "))
 		}
