@@ -78,7 +78,7 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 		cleanCmd := exec.Command("ssh", hostname, "cd $HOME/nix-config && git status --porcelain")
 		cleanOutput, err := cleanCmd.CombinedOutput()
 		if err != nil {
-			fmt.Printf("  %s\n", colors.Error.Sprintf("Error checking git status on %s: %v", hostname, err))
+			colors.Error.Printf("  Error checking git status on %s: %v\n", hostname, err)
 			continue
 		}
 
@@ -103,7 +103,7 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 		// Copy patch to remote
 		copyCmd := exec.Command("scp", patchFile.Name(), fmt.Sprintf("%s:%s", hostname, remotePatchFile))
 		if err := copyCmd.Run(); err != nil {
-			fmt.Printf("  %s\n", colors.Error.Sprintf("Error copying patch: %v", err))
+			colors.Error.Printf("  Error copying patch: %v\n", err)
 			continue
 		}
 
@@ -117,7 +117,7 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 
 		// Check git apply result after cleanup
 		if err != nil {
-			fmt.Printf("  %s\n", colors.Error.Sprintf("Error applying patch: %v", err))
+			colors.Error.Printf("  Error applying patch: %v\n", err)
 			if len(applyOutput) > 0 {
 				colors.Secondary.Printf("  %s\n", string(applyOutput))
 			}

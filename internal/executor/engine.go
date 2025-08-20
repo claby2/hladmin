@@ -128,7 +128,7 @@ func DisplayResults(results []Result) {
 		}
 
 		if result.Err != nil {
-			fmt.Printf("%s\n", colors.Error.Sprintf("%v", result.Err))
+			colors.Error.Printf("%v\n", result.Err)
 		} else {
 			fmt.Printf("%s %s Successfully executed on %s\n", colors.Header.Sprint("==="), colors.Success.Sprint("✓"), colors.Hostname.Sprint(result.Hostname))
 		}
