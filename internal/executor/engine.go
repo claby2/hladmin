@@ -38,7 +38,10 @@ func ExecuteOnHostsInteractive(hosts []string, command string) error {
 		return nil
 	}
 
-	for _, hostname := range hosts {
+	for i, hostname := range hosts {
+		if i > 0 {
+			fmt.Println()
+		}
 		isLocal := hostname == "localhost"
 		if err := executeInteractive(hostname, command, isLocal); err != nil {
 			return err
@@ -117,21 +120,41 @@ func ExecuteOnHostsParallelWithProgress(hosts []string, command string, progress
 }
 
 func DisplayResults(results []Result) {
-	for _, result := range results {
-		fmt.Printf("%s Executing on %s: %s\n", colors.Header.Sprint("==="), colors.Hostname.Sprint(result.Hostname), result.Command)
+	for i, result := range results {
+		if i > 0 {
+			fmt.Println()
+		}
+		printResultHeader(result.Hostname, result.Command)
 
 		if result.Stdout != "" {
-			fmt.Print(result.Stdout)
+			printOutputWithPrefix(result.Hostname, result.Stdout)
 		}
 		if result.Stderr != "" {
-			fmt.Print(result.Stderr)
+			printOutputWithPrefix(result.Hostname, result.Stderr)
 		}
 
 		if result.Err != nil {
 			colors.Error.Printf("%v\n", result.Err)
 		} else {
-			fmt.Printf("%s %s Successfully executed on %s\n", colors.Header.Sprint("==="), colors.Success.Sprint("✓"), colors.Hostname.Sprint(result.Hostname))
+			fmt.Printf("%s\n", colors.Success.Sprint("✓ done"))
 		}
+	}
+}
+
+func printResultHeader(hostname, command string) {
+	header := fmt.Sprintf("%s %s", colors.Header.Sprint("===»"), colors.Hostname.Sprint(hostname))
+	fmt.Printf("%s\n", header)
+	fmt.Printf("%s %s\n", colors.Secondary.Sprint("cmd:"), command)
+}
+
+func printOutputWithPrefix(hostname, output string) {
+	prefix := fmt.Sprintf("%s %s ", colors.Hostname.Sprint(hostname), colors.Secondary.Sprint("|"))
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		if i == len(lines)-1 && line == "" {
+			return
+		}
+		fmt.Printf("%s%s\n", prefix, line)
 	}
 }
 
@@ -165,7 +188,7 @@ func execute(hostname, command string, isLocal bool) Result {
 }
 
 func executeInteractive(hostname, command string, isLocal bool) error {
-	fmt.Printf("%s Executing on %s: %s\n", colors.Header.Sprint("==="), colors.Hostname.Sprint(hostname), command)
+	printResultHeader(hostname, command)
 
 	cmd := exec.Command("ssh", "-t", hostname, command)
 	if isLocal {
@@ -179,6 +202,6 @@ func executeInteractive(hostname, command string, isLocal bool) error {
 		return fmt.Errorf("%s", colors.Error.Sprintf("error executing on %s: %v", hostname, err))
 	}
 
-	fmt.Printf("%s %s Successfully executed on %s\n", colors.Header.Sprint("==="), colors.Success.Sprint("✓"), colors.Hostname.Sprint(hostname))
+	fmt.Printf("%s\n", colors.Success.Sprint("✓ done"))
 	return nil
 }
