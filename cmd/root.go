@@ -5,9 +5,10 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "hladmin",
-	Short: "Homelab administration tool",
-	Long:  "A tool for managing homelab servers running NixOS and macOS with nix-darwin",
+	Use:           "hladmin",
+	Short:         "Homelab administration tool",
+	Long:          "A tool for managing homelab servers running NixOS and macOS with nix-darwin",
+	SilenceErrors: true,
 }
 
 func Execute() error {
