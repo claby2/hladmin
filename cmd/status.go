@@ -2,13 +2,24 @@ package cmd
 
 import (
 	"fmt"
-	"os"
+	"regexp"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/claby2/hladmin/internal/colors"
 	"github.com/claby2/hladmin/internal/executor"
 	"github.com/spf13/cobra"
 )
+
+var ansiRegexp = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// padRight pads s to width based on its visual length (excluding ANSI codes).
+func padRight(s string, width int) string {
+	visLen := len(ansiRegexp.ReplaceAllString(s, ""))
+	if visLen >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-visLen)
+}
 
 var statusCmd = &cobra.Command{
 	Use:           hostUsagePattern("status"),
@@ -136,21 +147,43 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Print columnar output
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.TabIndent)
-	fmt.Fprintf(w, "HOSTNAME\tHOSTCLASS\tVERSION\tREPO\tDISK\tMEM\n")
-
-	for _, host := range hosts {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			host.hostname,
-			host.hostclass,
-			host.version,
-			host.repo,
-			host.diskUsage,
-			host.memUsage,
-		)
+	// Compute column widths
+	nameW, classW, verW, repoW, diskW := len("HOSTNAME"), len("HOSTCLASS"), len("VERSION"), len("REPO"), len("DISK")
+	for _, h := range hosts {
+		nameW = max(nameW, len(h.hostname))
+		classW = max(classW, len(h.hostclass))
+		verW = max(verW, len(h.version))
+		repoW = max(repoW, len(h.repo))
+		diskW = max(diskW, len(h.diskUsage))
 	}
 
-	w.Flush()
+	// Print header
+	fmt.Printf("%s  %s  %s  %s  %s  %s\n",
+		padRight("HOSTNAME", nameW),
+		padRight("HOSTCLASS", classW),
+		padRight("VERSION", verW),
+		padRight("REPO", repoW),
+		padRight("DISK", diskW),
+		"MEM")
+
+	// Print data rows with colored VERSION and REPO
+	for _, host := range hosts {
+		var versionStr string
+		if host.version == host.repo {
+			versionStr = colors.Success.Sprint(host.version)
+		} else {
+			versionStr = colors.Warning.Sprint(host.version)
+		}
+		repoStr := colors.Success.Sprint(host.repo)
+
+		fmt.Printf("%s  %s  %s  %s  %s  %s\n",
+			padRight(host.hostname, nameW),
+			padRight(host.hostclass, classW),
+			padRight(versionStr, verW),
+			padRight(repoStr, repoW),
+			padRight(host.diskUsage, diskW),
+			host.memUsage)
+	}
+
 	return nil
 }
