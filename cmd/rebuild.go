@@ -14,6 +14,10 @@ var rebuildCmd = &cobra.Command{
 	SilenceErrors: true,
 }
 
+func init() {
+	rebuildCmd.Flags().Bool("remote", false, "Pass --remote flag to rebuild.sh")
+}
+
 func runRebuild(cmd *cobra.Command, args []string) error {
 	hostnames, err := resolveHosts(args)
 	if err != nil {
@@ -21,6 +25,9 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 	}
 
 	command := "cd $HOME/nix-config && ./rebuild.sh"
+	if remote, _ := cmd.Flags().GetBool("remote"); remote {
+		command += " --remote"
+	}
 
 	if err := executor.ExecuteOnHostsInteractive(hostnames, command); err != nil {
 		return err
