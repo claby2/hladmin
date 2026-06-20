@@ -71,12 +71,10 @@ func runExec(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else {
-		var results []executor.Result
-		results, err := executor.ExecuteOnHostsParallelWithProgress(hostnames, command, "Executing command")
+		results, err := executor.ExecuteStreaming(hostnames, command)
 		if err != nil {
 			return err
 		}
-		executor.DisplayResults(results)
 		if err = executor.ResultsError(results); err != nil {
 			return err
 		}

@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/claby2/hladmin/internal/colors"
 )
 
@@ -21,6 +20,7 @@ type Result struct {
 	Stdout   string
 	Stderr   string
 	Err      error
+	Duration time.Duration
 }
 
 func verifyHostsAndCommand(hosts []string, command string) error {
@@ -67,54 +67,6 @@ func ExecuteOnHostsParallel(hosts []string, command string) ([]Result, error) {
 		}(i, hostname)
 	}
 	wg.Wait()
-
-	return results, nil
-}
-
-// ExecuteOnHostsParallelWithProgress executes commands on hosts with optional progress indicator
-func ExecuteOnHostsParallelWithProgress(hosts []string, command string, progressMessage string) ([]Result, error) {
-	if err := verifyHostsAndCommand(hosts, command); err != nil {
-		return nil, nil
-	}
-
-	// Skip progress indicator for single host or when disabled
-	if len(hosts) == 1 {
-		return ExecuteOnHostsParallel(hosts, command)
-	}
-
-	if progressMessage == "" {
-		progressMessage = "Executing on hosts"
-	}
-
-	results := make([]Result, len(hosts))
-	var wg sync.WaitGroup
-	var completedCount int64
-	var mu sync.Mutex
-
-	// Create and start spinner
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Suffix = fmt.Sprintf(" %s... (0/%d hosts)", progressMessage, len(hosts))
-	s.Start()
-
-	for i, hostname := range hosts {
-		wg.Add(1)
-		go func(i int, host string) {
-			defer wg.Done()
-			isLocal := host == "localhost"
-			results[i] = execute(host, command, isLocal)
-
-			// Update progress
-			mu.Lock()
-			completedCount++
-			s.Suffix = fmt.Sprintf(" %s... (%d/%d hosts)", progressMessage, completedCount, len(hosts))
-			mu.Unlock()
-		}(i, hostname)
-	}
-	wg.Wait()
-
-	// Stop spinner and show completion
-	s.Stop()
-	fmt.Printf("%s %s completed (%d/%d hosts)\n", colors.Success.Sprint("✓"), progressMessage, len(hosts), len(hosts))
 
 	return results, nil
 }
@@ -178,9 +130,11 @@ func execute(hostname, command string, isLocal bool) Result {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	start := time.Now()
 	if err := cmd.Run(); err != nil {
 		result.Err = fmt.Errorf("error executing on %s: %v", hostname, err)
 	}
+	result.Duration = time.Since(start)
 
 	result.Stdout = stdout.String()
 	result.Stderr = stderr.String()

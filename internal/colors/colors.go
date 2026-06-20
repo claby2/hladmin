@@ -43,6 +43,11 @@ func disableColors() {
 	color.NoColor = true
 }
 
+// IsTerminal reports whether stdout is connected to a terminal.
+func IsTerminal() bool {
+	return isTerminal()
+}
+
 func isTerminal() bool {
 	// Check if stdout is a terminal
 	fileInfo, err := os.Stdout.Stat()

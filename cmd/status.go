@@ -102,37 +102,77 @@ func parseCompoundOutput(hostname, output string) hostInfo {
 	return info
 }
 
-func collectHostInfo(hosts []string) ([]hostInfo, error) {
-	command := createCompoundStatusCommand()
-
-	// Execute compound command on all hosts in parallel using executor with progress
-	results, err := executor.ExecuteOnHostsParallelWithProgress(hosts, command, "Collecting host status")
-	if err != nil {
-		return nil, err
-	}
-	if err = executor.ResultsError(results); err != nil {
-		return nil, err
-	}
-
-	var hostInfos []hostInfo
-	for _, result := range results {
-		if result.Err != nil {
-			// Create error hostInfo
-			hostInfos = append(hostInfos, hostInfo{
-				hostname:  result.Hostname,
+// renderStatusTable builds the status table lines from the current per-host
+// progress. Completed hosts show their parsed data; hosts still running show a
+// spinner and elapsed timer in place of their data columns.
+func renderStatusTable(progress []executor.HostProgress) []string {
+	infos := make([]hostInfo, len(progress))
+	for i, p := range progress {
+		switch {
+		case !p.Done:
+			infos[i] = hostInfo{hostname: p.Hostname}
+		case p.Result.Err != nil:
+			infos[i] = hostInfo{
+				hostname:  p.Hostname,
 				hostclass: "error",
 				version:   "error",
 				repo:      "error",
 				diskUsage: "error",
 				memUsage:  "error",
-			})
-		} else {
-			// Parse the compound output
-			hostInfos = append(hostInfos, parseCompoundOutput(result.Hostname, result.Stdout))
+			}
+		default:
+			infos[i] = parseCompoundOutput(p.Hostname, p.Result.Stdout)
 		}
 	}
 
-	return hostInfos, nil
+	// Compute column widths from the header and completed rows.
+	nameW, classW, verW, repoW, diskW := len("HOSTNAME"), len("HOSTCLASS"), len("VERSION"), len("REPO"), len("DISK")
+	for i, info := range infos {
+		nameW = max(nameW, len(info.hostname))
+		if progress[i].Done {
+			classW = max(classW, len(info.hostclass))
+			verW = max(verW, len(info.version))
+			repoW = max(repoW, len(info.repo))
+			diskW = max(diskW, len(info.diskUsage))
+		}
+	}
+
+	lines := []string{
+		fmt.Sprintf("%s  %s  %s  %s  %s  %s",
+			padRight("HOSTNAME", nameW),
+			padRight("HOSTCLASS", classW),
+			padRight("VERSION", verW),
+			padRight("REPO", repoW),
+			padRight("DISK", diskW),
+			"MEM"),
+	}
+
+	for i, info := range infos {
+		if !progress[i].Done {
+			indicator := colors.Secondary.Sprintf("%s collecting…  %s",
+				executor.SpinnerFrame(), executor.FormatDuration(progress[i].Elapsed))
+			lines = append(lines, fmt.Sprintf("%s  %s", padRight(info.hostname, nameW), indicator))
+			continue
+		}
+
+		var versionStr string
+		if info.version == info.repo {
+			versionStr = colors.Success.Sprint(info.version)
+		} else {
+			versionStr = colors.Warning.Sprint(info.version)
+		}
+		repoStr := colors.Success.Sprint(info.repo)
+
+		lines = append(lines, fmt.Sprintf("%s  %s  %s  %s  %s  %s",
+			padRight(info.hostname, nameW),
+			padRight(info.hostclass, classW),
+			padRight(versionStr, verW),
+			padRight(repoStr, repoW),
+			padRight(info.diskUsage, diskW),
+			info.memUsage))
+	}
+
+	return lines
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
@@ -141,49 +181,12 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Collect information for all hosts using optimized compound command
-	hosts, err := collectHostInfo(hostnames)
+	command := createCompoundStatusCommand()
+
+	results, err := executor.ExecuteLiveTable(hostnames, command, renderStatusTable)
 	if err != nil {
 		return err
 	}
 
-	// Compute column widths
-	nameW, classW, verW, repoW, diskW := len("HOSTNAME"), len("HOSTCLASS"), len("VERSION"), len("REPO"), len("DISK")
-	for _, h := range hosts {
-		nameW = max(nameW, len(h.hostname))
-		classW = max(classW, len(h.hostclass))
-		verW = max(verW, len(h.version))
-		repoW = max(repoW, len(h.repo))
-		diskW = max(diskW, len(h.diskUsage))
-	}
-
-	// Print header
-	fmt.Printf("%s  %s  %s  %s  %s  %s\n",
-		padRight("HOSTNAME", nameW),
-		padRight("HOSTCLASS", classW),
-		padRight("VERSION", verW),
-		padRight("REPO", repoW),
-		padRight("DISK", diskW),
-		"MEM")
-
-	// Print data rows with colored VERSION and REPO
-	for _, host := range hosts {
-		var versionStr string
-		if host.version == host.repo {
-			versionStr = colors.Success.Sprint(host.version)
-		} else {
-			versionStr = colors.Warning.Sprint(host.version)
-		}
-		repoStr := colors.Success.Sprint(host.repo)
-
-		fmt.Printf("%s  %s  %s  %s  %s  %s\n",
-			padRight(host.hostname, nameW),
-			padRight(host.hostclass, classW),
-			padRight(versionStr, verW),
-			padRight(repoStr, repoW),
-			padRight(host.diskUsage, diskW),
-			host.memUsage)
-	}
-
-	return nil
+	return executor.ResultsError(results)
 }
