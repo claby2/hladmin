@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/claby2/hladmin/internal/colors"
@@ -35,7 +34,7 @@ func verifyHostsAndCommand(hosts []string, command string) error {
 
 func ExecuteOnHostsInteractive(hosts []string, command string) error {
 	if err := verifyHostsAndCommand(hosts, command); err != nil {
-		return nil
+		return err
 	}
 
 	for i, hostname := range hosts {
@@ -48,49 +47,6 @@ func ExecuteOnHostsInteractive(hosts []string, command string) error {
 		}
 	}
 	return nil
-}
-
-func ExecuteOnHostsParallel(hosts []string, command string) ([]Result, error) {
-	if err := verifyHostsAndCommand(hosts, command); err != nil {
-		return nil, nil
-	}
-
-	results := make([]Result, len(hosts))
-	var wg sync.WaitGroup
-
-	for i, hostname := range hosts {
-		wg.Add(1)
-		go func(i int, host string) {
-			defer wg.Done()
-			isLocal := host == "localhost"
-			results[i] = execute(host, command, isLocal)
-		}(i, hostname)
-	}
-	wg.Wait()
-
-	return results, nil
-}
-
-func DisplayResults(results []Result) {
-	for i, result := range results {
-		if i > 0 {
-			fmt.Println()
-		}
-		printResultHeader(result.Hostname, result.Command)
-
-		if result.Stdout != "" {
-			printOutputWithPrefix(result.Hostname, result.Stdout)
-		}
-		if result.Stderr != "" {
-			printOutputWithPrefix(result.Hostname, result.Stderr)
-		}
-
-		if result.Err != nil {
-			colors.Error.Printf("%v\n", result.Err)
-		} else {
-			fmt.Printf("%s\n", colors.Success.Sprint("✓ done"))
-		}
-	}
 }
 
 func printResultHeader(hostname, command string) {

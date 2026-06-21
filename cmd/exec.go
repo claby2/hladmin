@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var execParallel bool
 var execInteractive bool
 
 var execCmd = &cobra.Command{
@@ -67,18 +66,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 
 	// Determine execution mode
 	if isInteractive {
-		if err := executor.ExecuteOnHostsInteractive(hostnames, command); err != nil {
-			return err
-		}
-	} else {
-		results, err := executor.ExecuteStreaming(hostnames, command)
-		if err != nil {
-			return err
-		}
-		if err = executor.ResultsError(results); err != nil {
-			return err
-		}
+		return executor.ExecuteOnHostsInteractive(hostnames, command)
 	}
-
-	return nil
+	return streamCommand(hostnames, command)
 }

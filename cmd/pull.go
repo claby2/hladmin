@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"github.com/claby2/hladmin/internal/executor"
 	"github.com/spf13/cobra"
 )
 
@@ -22,12 +21,5 @@ func runPull(cmd *cobra.Command, args []string) error {
 
 	command := "cd $HOME/nix-config && git pull"
 
-	results, err := executor.ExecuteStreaming(hostnames, command)
-	if err != nil {
-		return err
-	}
-	if err = executor.ResultsError(results); err != nil {
-		return err
-	}
-	return nil
+	return streamCommand(hostnames, command)
 }

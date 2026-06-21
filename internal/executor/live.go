@@ -127,7 +127,7 @@ func launchTimed(hosts []string, command string) ([]Result, []*hostStatus, <-cha
 // running (TTY only).
 func ExecuteStreaming(hosts []string, command string) ([]Result, error) {
 	if err := verifyHostsAndCommand(hosts, command); err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	results, statuses, completions, mu := launchTimed(hosts, command)
@@ -198,7 +198,7 @@ func printStreamResult(result Result) {
 // non-TTY it renders once after all hosts finish.
 func ExecuteLiveTable(hosts []string, command string, render func([]HostProgress) []string) ([]Result, error) {
 	if err := verifyHostsAndCommand(hosts, command); err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	results, statuses, completions, mu := launchTimed(hosts, command)

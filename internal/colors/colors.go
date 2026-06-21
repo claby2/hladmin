@@ -21,35 +21,15 @@ var (
 )
 
 func init() {
-	// Respect NO_COLOR environment variable (standard)
-	if os.Getenv("NO_COLOR") != "" {
-		disableColors()
-		return
+	// Disable color when explicitly requested (NO_COLOR is the standard,
+	// HLADMIN_NO_COLOR is a tool-specific override) or when stdout is not a TTY.
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("HLADMIN_NO_COLOR") != "" || !IsTerminal() {
+		color.NoColor = true
 	}
-
-	// Respect HLADMIN_NO_COLOR for tool-specific override
-	if os.Getenv("HLADMIN_NO_COLOR") != "" {
-		disableColors()
-		return
-	}
-
-	// Auto-detect if output is not a TTY
-	if !isTerminal() {
-		disableColors()
-	}
-}
-
-func disableColors() {
-	color.NoColor = true
 }
 
 // IsTerminal reports whether stdout is connected to a terminal.
 func IsTerminal() bool {
-	return isTerminal()
-}
-
-func isTerminal() bool {
-	// Check if stdout is a terminal
 	fileInfo, err := os.Stdout.Stat()
 	if err != nil {
 		return false

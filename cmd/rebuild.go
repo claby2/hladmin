@@ -29,8 +29,5 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 		command += " --remote"
 	}
 
-	if err := executor.ExecuteOnHostsInteractive(hostnames, command); err != nil {
-		return err
-	}
-	return nil
+	return executor.ExecuteOnHostsInteractive(hostnames, command)
 }

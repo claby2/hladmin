@@ -77,22 +77,28 @@ echo
 `, memCmd)
 }
 
-func parseCompoundOutput(hostname, output string) hostInfo {
-	info := hostInfo{hostname: hostname}
+// errorHostInfo returns a hostInfo with every data column marked "error".
+func errorHostInfo(hostname string) hostInfo {
+	return hostInfo{
+		hostname:  hostname,
+		hostclass: "error",
+		version:   "error",
+		repo:      "error",
+		diskUsage: "error",
+		memUsage:  "error",
+	}
+}
 
+func parseCompoundOutput(hostname, output string) hostInfo {
 	// Split by delimiter
 	parts := strings.Split(strings.TrimSpace(output), "|||")
 
 	// If we don't get exactly 5 parts, return error values
 	if len(parts) != 5 {
-		info.hostclass = "error"
-		info.version = "error"
-		info.repo = "error"
-		info.diskUsage = "error"
-		info.memUsage = "error"
-		return info
+		return errorHostInfo(hostname)
 	}
 
+	info := hostInfo{hostname: hostname}
 	info.hostclass = strings.TrimSpace(parts[0])
 	info.version = strings.TrimSpace(parts[1])
 	info.repo = strings.TrimSpace(parts[2])
@@ -112,14 +118,7 @@ func renderStatusTable(progress []executor.HostProgress) []string {
 		case !p.Done:
 			infos[i] = hostInfo{hostname: p.Hostname}
 		case p.Result.Err != nil:
-			infos[i] = hostInfo{
-				hostname:  p.Hostname,
-				hostclass: "error",
-				version:   "error",
-				repo:      "error",
-				diskUsage: "error",
-				memUsage:  "error",
-			}
+			infos[i] = errorHostInfo(p.Hostname)
 		default:
 			infos[i] = parseCompoundOutput(p.Hostname, p.Result.Stdout)
 		}
