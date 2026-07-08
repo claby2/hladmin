@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/claby2/hladmin/internal/executor"
+	"github.com/claby2/hladmin/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -66,7 +66,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 
 	// Determine execution mode
 	if isInteractive {
-		return executor.ExecuteOnHostsInteractive(hostnames, command)
+		return ui.RunInteractive(hostnames, command)
 	}
 	return streamCommand(hostnames, command)
 }

@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/claby2/hladmin/internal/executor"
+	"github.com/claby2/hladmin/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -29,5 +29,5 @@ func runRebuild(cmd *cobra.Command, args []string) error {
 		command += " --remote"
 	}
 
-	return executor.ExecuteOnHostsInteractive(hostnames, command)
+	return ui.RunInteractive(hostnames, command)
 }

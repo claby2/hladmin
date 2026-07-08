@@ -5,6 +5,7 @@ import (
 
 	"github.com/claby2/hladmin/internal/config"
 	"github.com/claby2/hladmin/internal/executor"
+	"github.com/claby2/hladmin/internal/ui"
 )
 
 // hostUsagePattern returns a standardized usage pattern for commands that accept hosts
@@ -45,7 +46,7 @@ func resolveHosts(args []string) ([]string, error) {
 // streamCommand runs command on hosts with streaming output and returns the
 // first host error, if any.
 func streamCommand(hostnames []string, command string) error {
-	results, err := executor.ExecuteStreaming(hostnames, command)
+	results, err := ui.RunStreaming(hostnames, command)
 	if err != nil {
 		return err
 	}

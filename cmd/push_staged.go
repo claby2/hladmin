@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/claby2/hladmin/internal/colors"
+	"github.com/claby2/hladmin/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -47,12 +47,12 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(diffOutput) == 0 {
-		colors.Info.Println("No staged changes found")
+		fmt.Println(ui.Info.Render("No staged changes found"))
 		return nil
 	}
 
 	if dryRun {
-		colors.Header.Println("Staged changes:")
+		fmt.Println(ui.Header.Render("Staged changes:"))
 		fmt.Println(string(diffOutput))
 		fmt.Println()
 	}
@@ -72,26 +72,26 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 
 	// Process each host
 	for _, hostname := range hostnames {
-		fmt.Printf("%s %s\n", colors.Info.Sprint("Processing host:"), colors.Hostname.Sprint(hostname))
+		fmt.Printf("%s %s\n", ui.Info.Render("Processing host:"), ui.Hostname.Render(hostname))
 
 		// Check if remote repo is clean
 		cleanCmd := exec.Command("ssh", hostname, "cd $HOME/nix-config && git status --porcelain")
 		cleanOutput, err := cleanCmd.CombinedOutput()
 		if err != nil {
-			colors.Error.Printf("  Error checking git status on %s: %v\n", hostname, err)
+			fmt.Println(ui.Error.Render(fmt.Sprintf("  Error checking git status on %s: %v", hostname, err)))
 			continue
 		}
 
 		if strings.TrimSpace(string(cleanOutput)) != "" {
-			colors.Warning.Println("  Repository has uncommitted changes, skipping")
+			fmt.Println(ui.Warning.Render("  Repository has uncommitted changes, skipping"))
 			if dryRun {
-				colors.Secondary.Println("  Would skip due to uncommitted changes")
+				fmt.Println(ui.Secondary.Render("  Would skip due to uncommitted changes"))
 			}
 			continue
 		}
 
 		if dryRun {
-			colors.Success.Println("  Repository is clean, would apply patch")
+			fmt.Println(ui.Success.Render("  Repository is clean, would apply patch"))
 			continue
 		}
 
@@ -103,7 +103,7 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 		// Copy patch to remote
 		copyCmd := exec.Command("scp", patchFile.Name(), fmt.Sprintf("%s:%s", hostname, remotePatchFile))
 		if err := copyCmd.Run(); err != nil {
-			colors.Error.Printf("  Error copying patch: %v\n", err)
+			fmt.Println(ui.Error.Render(fmt.Sprintf("  Error copying patch: %v", err)))
 			continue
 		}
 
@@ -117,14 +117,14 @@ func runPushStaged(cmd *cobra.Command, args []string) error {
 
 		// Check git apply result after cleanup
 		if err != nil {
-			colors.Error.Printf("  Error applying patch: %v\n", err)
+			fmt.Println(ui.Error.Render(fmt.Sprintf("  Error applying patch: %v", err)))
 			if len(applyOutput) > 0 {
-				colors.Secondary.Printf("  %s\n", string(applyOutput))
+				fmt.Println(ui.Secondary.Render("  " + string(applyOutput)))
 			}
 			continue
 		}
 
-		colors.Success.Println("  Patch applied successfully")
+		fmt.Println(ui.Success.Render("  Patch applied successfully"))
 	}
 
 	return nil

@@ -8,8 +8,6 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
-	"github.com/claby2/hladmin/internal/colors"
 )
 
 // Result represents the result of command execution on a single host
@@ -22,7 +20,9 @@ type Result struct {
 	Duration time.Duration
 }
 
-func verifyHostsAndCommand(hosts []string, command string) error {
+// VerifyHostsAndCommand validates that at least one host and a non-empty command
+// were provided.
+func VerifyHostsAndCommand(hosts []string, command string) error {
 	if len(hosts) == 0 {
 		return errors.New("at least one hostname must be specified")
 	}
@@ -32,40 +32,7 @@ func verifyHostsAndCommand(hosts []string, command string) error {
 	return nil
 }
 
-func ExecuteOnHostsInteractive(hosts []string, command string) error {
-	if err := verifyHostsAndCommand(hosts, command); err != nil {
-		return err
-	}
-
-	for i, hostname := range hosts {
-		if i > 0 {
-			fmt.Println()
-		}
-		isLocal := hostname == "localhost"
-		if err := executeInteractive(hostname, command, isLocal); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func printResultHeader(hostname, command string) {
-	header := fmt.Sprintf("%s %s", colors.Header.Sprint("===»"), colors.Hostname.Sprint(hostname))
-	fmt.Printf("%s\n", header)
-	fmt.Printf("%s %s\n", colors.Secondary.Sprint("cmd:"), command)
-}
-
-func printOutputWithPrefix(hostname, output string) {
-	prefix := fmt.Sprintf("%s %s ", colors.Hostname.Sprint(hostname), colors.Secondary.Sprint("|"))
-	lines := strings.Split(output, "\n")
-	for i, line := range lines {
-		if i == len(lines)-1 && line == "" {
-			return
-		}
-		fmt.Printf("%s%s\n", prefix, line)
-	}
-}
-
+// ResultsError returns the first non-nil error found in results, if any.
 func ResultsError(results []Result) error {
 	for _, result := range results {
 		if result.Err != nil {
@@ -97,11 +64,18 @@ func execute(hostname, command string, isLocal bool) Result {
 	return result
 }
 
-func executeInteractive(hostname, command string, isLocal bool) error {
-	printResultHeader(hostname, command)
+// RunOnHost executes command on a single host, capturing its output. It uses a
+// local bash shell for localhost and SSH for remote hosts.
+func RunOnHost(hostname, command string) Result {
+	return execute(hostname, command, hostname == "localhost")
+}
 
+// RunInteractive executes command on a single host with stdin/stdout/stderr wired
+// to the current process. It performs no output formatting; presentation is the
+// caller's responsibility.
+func RunInteractive(hostname, command string) error {
 	cmd := exec.Command("ssh", "-t", hostname, command)
-	if isLocal {
+	if hostname == "localhost" {
 		cmd = exec.Command("bash", "-c", command)
 	}
 	cmd.Stdout = os.Stdout
@@ -109,9 +83,7 @@ func executeInteractive(hostname, command string, isLocal bool) error {
 	cmd.Stdin = os.Stdin
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s", colors.Error.Sprintf("error executing on %s: %v", hostname, err))
+		return fmt.Errorf("error executing on %s: %v", hostname, err)
 	}
-
-	fmt.Printf("%s\n", colors.Success.Sprint("✓ done"))
 	return nil
 }

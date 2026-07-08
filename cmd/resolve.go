@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/claby2/hladmin/internal/colors"
 	"github.com/claby2/hladmin/internal/config"
+	"github.com/claby2/hladmin/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -36,9 +36,9 @@ func runResolve(cmd *cobra.Command, args []string) error {
 
 	// Always show config location first
 	if configExists {
-		fmt.Printf("%s %s\n\n", colors.Info.Sprint("Config:"), configPath)
+		fmt.Printf("%s %s\n\n", ui.Info.Render("Config:"), configPath)
 	} else {
-		fmt.Printf("%s %s (checked %s)\n\n", colors.Info.Sprint("Config:"), colors.Warning.Sprint("No configuration file found"), configPath)
+		fmt.Printf("%s %s (checked %s)\n\n", ui.Info.Render("Config:"), ui.Warning.Render("No configuration file found"), configPath)
 	}
 
 	// If no arguments, show full configuration
@@ -57,18 +57,18 @@ func runResolve(cmd *cobra.Command, args []string) error {
 
 func showFullConfiguration(cfg *config.HostConfig) {
 	if len(cfg.Groups) == 0 {
-		colors.Warning.Println("No groups defined.")
+		fmt.Println(ui.Warning.Render("No groups defined."))
 	} else {
-		colors.Header.Println("Groups:")
+		fmt.Println(ui.Header.Render("Groups:"))
 		for groupName, hosts := range cfg.Groups {
-			fmt.Printf("  %s: %s\n", colors.Bold.Sprintf("@%s", groupName), strings.Join(hosts, ", "))
+			fmt.Printf("  %s: %s\n", ui.Bold.Render("@"+groupName), strings.Join(hosts, ", "))
 		}
 		fmt.Println()
 
 		if cfg.DefaultGroup != "" {
-			fmt.Printf("%s %s\n", colors.Info.Sprint("Default Group:"), colors.Bold.Sprint(cfg.DefaultGroup))
+			fmt.Printf("%s %s\n", ui.Info.Render("Default Group:"), ui.Bold.Render(cfg.DefaultGroup))
 		} else {
-			fmt.Printf("%s %s\n", colors.Info.Sprint("Default Group:"), colors.Secondary.Sprint("none"))
+			fmt.Printf("%s %s\n", ui.Info.Render("Default Group:"), ui.Secondary.Render("none"))
 		}
 	}
 }
@@ -84,16 +84,16 @@ func showHostResolution(cfg *config.HostConfig, args []string) error {
 		if strings.HasPrefix(arg, "@") {
 			groupName := arg[1:]
 			if hosts, exists := cfg.Groups[groupName]; exists {
-				fmt.Printf("%s -> %s\n", colors.Bold.Sprint(arg), strings.Join(hosts, ", "))
+				fmt.Printf("%s -> %s\n", ui.Bold.Render(arg), strings.Join(hosts, ", "))
 			} else {
-				fmt.Printf("%s -> %s\n", colors.Bold.Sprint(arg), colors.Error.Sprint("error: unknown group"))
+				fmt.Printf("%s -> %s\n", ui.Bold.Render(arg), ui.Error.Render("error: unknown group"))
 			}
 		} else {
-			fmt.Printf("%s -> %s\n", colors.Hostname.Sprint(arg), arg)
+			fmt.Printf("%s -> %s\n", ui.Hostname.Render(arg), arg)
 		}
 	}
 
 	fmt.Println()
-	fmt.Printf("%s %s\n", colors.Info.Sprint("Final host list:"), strings.Join(resolvedHosts, ", "))
+	fmt.Printf("%s %s\n", ui.Info.Render("Final host list:"), strings.Join(resolvedHosts, ", "))
 	return nil
 }

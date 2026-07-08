@@ -16,7 +16,7 @@
 
           src = ./.;
 
-          vendorHash = "sha256-K66gswCaU2GRdTF6V/Tyysg43o1ZJs+FEcOwvoK5YGk=";
+          vendorHash = "sha256-eXO4fgN4Sqh2VN6EnxsQeVOOjPJ1lOp7zZj94Sni1FI=";
 
           meta = with pkgs.lib; {
             description = "Homelab administration tool";

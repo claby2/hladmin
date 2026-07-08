@@ -2,24 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+	"time"
 
-	"github.com/claby2/hladmin/internal/colors"
 	"github.com/claby2/hladmin/internal/executor"
+	"github.com/claby2/hladmin/internal/ui"
 	"github.com/spf13/cobra"
 )
-
-var ansiRegexp = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-
-// padRight pads s to width based on its visual length (excluding ANSI codes).
-func padRight(s string, width int) string {
-	visLen := len(ansiRegexp.ReplaceAllString(s, ""))
-	if visLen >= width {
-		return s
-	}
-	return s + strings.Repeat(" ", width-visLen)
-}
 
 var statusCmd = &cobra.Command{
 	Use:           hostUsagePattern("status"),
@@ -108,70 +97,41 @@ func parseCompoundOutput(hostname, output string) hostInfo {
 	return info
 }
 
-// renderStatusTable builds the status table lines from the current per-host
-// progress. Completed hosts show their parsed data; hosts still running show a
-// spinner and elapsed timer in place of their data columns.
-func renderStatusTable(progress []executor.HostProgress) []string {
-	infos := make([]hostInfo, len(progress))
-	for i, p := range progress {
-		switch {
-		case !p.Done:
-			infos[i] = hostInfo{hostname: p.Hostname}
-		case p.Result.Err != nil:
-			infos[i] = errorHostInfo(p.Hostname)
-		default:
-			infos[i] = parseCompoundOutput(p.Hostname, p.Result.Stdout)
-		}
+// resultToHostInfo converts an execution result into the parsed status columns.
+func resultToHostInfo(r executor.Result) hostInfo {
+	if r.Err != nil {
+		return errorHostInfo(r.Hostname)
 	}
+	return parseCompoundOutput(r.Hostname, r.Stdout)
+}
 
-	// Compute column widths from the header and completed rows.
-	nameW, classW, verW, repoW, diskW := len("HOSTNAME"), len("HOSTCLASS"), len("VERSION"), len("REPO"), len("DISK")
-	for i, info := range infos {
-		nameW = max(nameW, len(info.hostname))
-		if progress[i].Done {
-			classW = max(classW, len(info.hostclass))
-			verW = max(verW, len(info.version))
-			repoW = max(repoW, len(info.repo))
-			diskW = max(diskW, len(info.diskUsage))
-		}
+// statusTableSpec defines the status table columns and per-host cell rendering.
+func statusTableSpec() ui.TableSpec {
+	return ui.TableSpec{
+		Headers: []string{"HOSTNAME", "HOSTCLASS", "VERSION", "REPO", "DISK", "MEM"},
+		CompletedRow: func(r executor.Result) []string {
+			info := resultToHostInfo(r)
+
+			versionStr := ui.Warning.Render(info.version)
+			if info.version == info.repo {
+				versionStr = ui.Success.Render(info.version)
+			}
+
+			return []string{
+				info.hostname,
+				info.hostclass,
+				versionStr,
+				ui.Success.Render(info.repo),
+				info.diskUsage,
+				info.memUsage,
+			}
+		},
+		RunningRow: func(host, spinnerFrame string, elapsed time.Duration) []string {
+			indicator := ui.Secondary.Render(fmt.Sprintf("%s collecting…  %s",
+				spinnerFrame, ui.FormatDuration(elapsed)))
+			return []string{host, indicator, "", "", "", ""}
+		},
 	}
-
-	lines := []string{
-		fmt.Sprintf("%s  %s  %s  %s  %s  %s",
-			padRight("HOSTNAME", nameW),
-			padRight("HOSTCLASS", classW),
-			padRight("VERSION", verW),
-			padRight("REPO", repoW),
-			padRight("DISK", diskW),
-			"MEM"),
-	}
-
-	for i, info := range infos {
-		if !progress[i].Done {
-			indicator := colors.Secondary.Sprintf("%s collecting…  %s",
-				executor.SpinnerFrame(), executor.FormatDuration(progress[i].Elapsed))
-			lines = append(lines, fmt.Sprintf("%s  %s", padRight(info.hostname, nameW), indicator))
-			continue
-		}
-
-		var versionStr string
-		if info.version == info.repo {
-			versionStr = colors.Success.Sprint(info.version)
-		} else {
-			versionStr = colors.Warning.Sprint(info.version)
-		}
-		repoStr := colors.Success.Sprint(info.repo)
-
-		lines = append(lines, fmt.Sprintf("%s  %s  %s  %s  %s  %s",
-			padRight(info.hostname, nameW),
-			padRight(info.hostclass, classW),
-			padRight(versionStr, verW),
-			padRight(repoStr, repoW),
-			padRight(info.diskUsage, diskW),
-			info.memUsage))
-	}
-
-	return lines
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
@@ -182,7 +142,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	command := createCompoundStatusCommand()
 
-	results, err := executor.ExecuteLiveTable(hostnames, command, renderStatusTable)
+	results, err := ui.RunLiveTable(hostnames, command, statusTableSpec())
 	if err != nil {
 		return err
 	}
