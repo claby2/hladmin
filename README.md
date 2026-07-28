@@ -1,6 +1,6 @@
 # hladmin
 
-A homelab administration tool for managing NixOS servers and macOS machines running nix-darwin. Built with Go and the Cobra CLI framework, hladmin executes commands remotely via SSH and provides a unified interface for common homelab operations.
+A homelab administration tool for managing NixOS servers and macOS machines running nix-darwin. Built with Rust and the clap CLI framework, hladmin executes commands remotely via SSH and provides a unified interface for common homelab operations.
 
 > ⚠️ WARNING: This tool makes several assumptions about the underlying hosts to accommodate my setup. Most of these assumptions should be documented here, but some details could be missing.
 
@@ -28,7 +28,8 @@ nix develop
 ```bash
 git clone https://github.com/claby2/hladmin.git
 cd hladmin
-go build -o hladmin
+cargo build --release
+# binary at target/release/hladmin
 ```
 
 ## Prerequisites

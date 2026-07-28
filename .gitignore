@@ -1,11 +1,8 @@
-# Binary output
-hladmin
+# Rust build artifacts
+/target
 
-# Go build artifacts
-*.exe
-*.dll
-*.so
-*.dylib
+# Nix build output
+result
 
 # IDE files
 .vscode/
@@ -14,5 +11,3 @@ hladmin
 # OS files
 .DS_Store
 Thumbs.db
-
-result

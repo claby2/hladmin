@@ -10,13 +10,13 @@
     flake-utils.lib.eachDefaultSystem (system:
       let pkgs = nixpkgs.legacyPackages.${system};
       in {
-        packages.default = pkgs.buildGoModule {
+        packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "hladmin";
           version = "0.1.0";
 
           src = ./.;
 
-          vendorHash = "sha256-eXO4fgN4Sqh2VN6EnxsQeVOOjPJ1lOp7zZj94Sni1FI=";
+          cargoHash = "sha256-6p12Qh74JYst+9mdHCU52LupN6yIEElyNDg4hCqeovk=";
 
           meta = with pkgs.lib; {
             description = "Homelab administration tool";
@@ -26,8 +26,7 @@
         };
 
         devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [ go gopls gotools go-tools ];
+          buildInputs = with pkgs; [ cargo rustc rustfmt clippy rust-analyzer ];
         };
       });
 }
-
