@@ -139,6 +139,31 @@ hladmin push-staged --dry-run server1 server2
 
 - `--dry-run`: Show what would be done without making changes
 
+#### reset
+
+Hard-reset `$HOME/nix-config` on remote hosts to a pristine `origin/main`: fetch, check out `main`, `git reset --hard origin/main`, and remove untracked files (`git clean -fd`). Useful for discarding patches previously applied with `push-staged` so the next `push-staged` finds a clean repository again.
+
+```bash
+# Reset remote hosts to origin/main
+hladmin reset server1 server2
+
+# Iterate on staged changes without confirmation prompts
+hladmin push-staged @servers
+# ...make and stage more changes locally...
+hladmin reset --yes @servers
+hladmin push-staged @servers
+```
+
+**Features:**
+
+- Only prompts for confirmation when uncommitted changes, untracked files, or unpushed commits would actually be destroyed (shows exactly what, per host)
+- Skips `localhost` (your staged changes originate there)
+- Gitignored files are untouched (no `git clean -x`)
+
+**Flags:**
+
+- `-y`, `--yes`: Skip the confirmation prompt
+
 #### resolve
 
 Show host configuration and resolve group references. Displays the current host configuration including group definitions and default group settings.

@@ -73,6 +73,21 @@ pub enum Commands {
         #[arg(value_name = "HOST")]
         hosts: Vec<String>,
     },
+    /// Hard-reset nix-config to origin/main on specified hosts
+    #[command(
+        long_about = "Fetch, check out main, hard-reset to origin/main, and remove untracked \
+                      files in $HOME/nix-config on each host. Prompts for confirmation when \
+                      changes would be destroyed. Use @group to reference host groups from \
+                      config."
+    )]
+    Reset {
+        /// Skip the confirmation prompt
+        #[arg(short = 'y', long)]
+        yes: bool,
+        /// Hostnames or @group references
+        #[arg(value_name = "HOST")]
+        hosts: Vec<String>,
+    },
     /// Show host configuration and resolve groups
     #[command(
         long_about = "Show the current host configuration and resolve group references. \

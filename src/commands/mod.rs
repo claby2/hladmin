@@ -2,6 +2,7 @@ mod exec;
 mod pull;
 mod push_staged;
 mod rebuild;
+mod reset;
 mod resolve;
 mod status;
 
@@ -22,6 +23,7 @@ pub fn dispatch(command: Commands) -> Result<()> {
         Commands::Rebuild { remote, hosts } => rebuild::run(remote, &hosts),
         Commands::Pull { hosts } => pull::run(&hosts),
         Commands::PushStaged { dry_run, hosts } => push_staged::run(dry_run, &hosts),
+        Commands::Reset { yes, hosts } => reset::run(yes, &hosts),
         Commands::Resolve { hosts } => resolve::run(&hosts),
     }
 }

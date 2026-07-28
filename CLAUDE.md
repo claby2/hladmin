@@ -32,7 +32,7 @@ cargo run -- <command> [flags] [hosts...]
 cargo test
 ```
 
-Unit tests cover config parsing/resolution, duration formatting, and status output parsing. End-to-end behavior relies on manual testing across different host types.
+Unit tests cover config parsing/resolution, duration formatting, and status/reset output parsing. End-to-end behavior relies on manual testing across different host types.
 
 ### Formatting and Linting
 
@@ -65,6 +65,7 @@ hladmin/
 │   │   ├── rebuild.rs         # Run rebuild.sh script interactively
 │   │   ├── pull.rs            # Execute git pull operations
 │   │   ├── push_staged.rs     # Push local staged changes to remote hosts
+│   │   ├── reset.rs           # Hard-reset remote nix-config repos to origin/main
 │   │   └── resolve.rs         # Show host configuration and resolve groups
 │   ├── config.rs              # Host groups and config file parsing
 │   ├── executor.rs            # Command execution engine (local sh / ssh, parallel threads)
@@ -164,6 +165,13 @@ finish, the table renders once at the end.
   `git apply`, unconditional remote cleanup. `--dry-run`/-n previews. `localhost`
   is skipped with a message (the staged changes originate there). Per-host
   errors print inline and never abort other hosts.
+- **reset**: quiet parallel pre-check (`git status --porcelain=v1 -b`) detects
+  work a hard reset would destroy (dirty entries or `[ahead N]` unpushed
+  commits); prompts y/N only when something would be lost (`-y`/`--yes` skips,
+  non-TTY stdin without `--yes` errors). Then parallel streaming
+  `git fetch origin && git checkout -f main && git reset --hard origin/main &&
+  git clean -fd`. `localhost` is skipped (staged changes originate there).
+  Pre-check failures skip that host and fail the exit code.
 - **resolve**: shows config path, groups (file order), default group; with args,
   shows per-@group expansion and the final deduplicated host list.
 
