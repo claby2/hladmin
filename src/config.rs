@@ -75,8 +75,12 @@ fn parse_config(contents: &str) -> Result<HostConfig> {
                 if fields.len() < 3 {
                     bail!("group directive requires at least one host on line {line_num}: {line}");
                 }
+                let name = fields[1];
+                if config.groups.contains_key(name) {
+                    bail!("duplicate group '{name}' on line {line_num}: {line}");
+                }
                 let hosts = fields[2..].iter().map(|s| s.to_string()).collect();
-                config.groups.insert(fields[1].to_string(), hosts);
+                config.groups.insert(name.to_string(), hosts);
             }
             "default" => {
                 if fields.len() != 2 {
@@ -180,6 +184,12 @@ mod tests {
             err.to_string(),
             "group directive requires at least one host on line 1: group empty"
         );
+    }
+
+    #[test]
+    fn error_duplicate_group() {
+        let err = parse_config("group g a\ngroup g b\n").unwrap_err();
+        assert_eq!(err.to_string(), "duplicate group 'g' on line 2: group g b");
     }
 
     #[test]

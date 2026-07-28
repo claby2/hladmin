@@ -39,7 +39,7 @@ fn create_command(hostname: &str, command: &str, interactive: bool) -> Command {
     }
 }
 
-/// Executes command on a single host, capturing its output. Uses a local bash
+/// Executes command on a single host, capturing its output. Uses a local `sh`
 /// shell for localhost and SSH for remote hosts.
 pub fn run_on_host(hostname: &str, command: &str) -> ExecResult {
     let start = Instant::now();

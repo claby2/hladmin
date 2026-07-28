@@ -131,15 +131,22 @@ fn push_to_host(hostname: &str, patch_path: &Path, dry_run: bool) {
     // hladmin instances target the same host.
     let remote_patch_file = format!("/tmp/hladmin-patch-{hostname}-{}.patch", std::process::id());
 
-    if let Err(err) = run_quiet(
+    let (scp_output, scp_err) = run_combined(
         Command::new("scp")
             .arg(patch_path)
             .arg(format!("{hostname}:{remote_patch_file}")),
-    ) {
+    );
+    if let Some(err) = scp_err {
         println!(
             "{}",
             styles::error().apply_to(format!("  Error copying patch: {err}"))
         );
+        if !scp_output.is_empty() {
+            println!(
+                "{}",
+                styles::secondary().apply_to(format!("  {scp_output}"))
+            );
+        }
         return;
     }
 

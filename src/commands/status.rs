@@ -6,7 +6,6 @@ use crate::ui::styles;
 use anyhow::Result;
 
 struct HostInfo {
-    hostname: String,
     hostclass: String,
     version: String,
     repo: String,
@@ -53,41 +52,29 @@ fn create_compound_status_command() -> String {
     format!("{COMPOUND_PREFIX}{}{COMPOUND_SUFFIX}", memory_command())
 }
 
-/// Returns a HostInfo with every data column marked "error".
-fn error_host_info(hostname: &str) -> HostInfo {
-    HostInfo {
-        hostname: hostname.to_string(),
-        hostclass: "error".to_string(),
-        version: "error".to_string(),
-        repo: "error".to_string(),
-        disk_usage: "error".to_string(),
-        mem_usage: "error".to_string(),
-    }
-}
-
-fn parse_compound_output(hostname: &str, output: &str) -> HostInfo {
+fn parse_compound_output(output: &str) -> Option<HostInfo> {
     let parts: Vec<&str> = output.trim().split("|||").collect();
 
     if parts.len() != 5 {
-        return error_host_info(hostname);
+        return None;
     }
 
-    HostInfo {
-        hostname: hostname.to_string(),
+    Some(HostInfo {
         hostclass: parts[0].trim().to_string(),
         version: parts[1].trim().to_string(),
         repo: parts[2].trim().to_string(),
         disk_usage: parts[3].trim().to_string(),
         mem_usage: parts[4].trim().to_string(),
-    }
+    })
 }
 
-/// Converts an execution result into the parsed status columns.
-fn result_to_host_info(result: &ExecResult) -> HostInfo {
+/// Converts an execution result into the parsed status columns. None means the
+/// command failed or produced unparseable output.
+fn result_to_host_info(result: &ExecResult) -> Option<HostInfo> {
     if result.err.is_some() {
-        return error_host_info(&result.hostname);
+        return None;
     }
-    parse_compound_output(&result.hostname, &result.stdout)
+    parse_compound_output(&result.stdout)
 }
 
 /// Defines the status table columns and per-host cell rendering.
@@ -95,7 +82,12 @@ fn status_table_spec() -> TableSpec {
     TableSpec {
         headers: vec!["HOSTNAME", "HOSTCLASS", "VERSION", "REPO", "DISK", "MEM"],
         completed_row: Box::new(|result| {
-            let info = result_to_host_info(result);
+            let Some(info) = result_to_host_info(result) else {
+                let error_cell = || styles::error().apply_to("error").to_string();
+                let mut row = vec![result.hostname.clone()];
+                row.resize_with(6, error_cell);
+                return row;
+            };
 
             let version_style = if info.version == info.repo {
                 styles::success()
@@ -104,7 +96,7 @@ fn status_table_spec() -> TableSpec {
             };
 
             vec![
-                info.hostname,
+                result.hostname.clone(),
                 info.hostclass,
                 version_style.apply_to(&info.version).to_string(),
                 styles::success().apply_to(&info.repo).to_string(),
@@ -147,7 +139,7 @@ mod tests {
 
     #[test]
     fn parses_five_fields() {
-        let info = parse_compound_output("h", "server|||abc123|||abc123|||42%|||63%\n");
+        let info = parse_compound_output("server|||abc123|||abc123|||42%|||63%\n").unwrap();
         assert_eq!(info.hostclass, "server");
         assert_eq!(info.version, "abc123");
         assert_eq!(info.repo, "abc123");
@@ -156,13 +148,8 @@ mod tests {
     }
 
     #[test]
-    fn malformed_output_yields_error_columns() {
-        let info = parse_compound_output("h", "garbage");
-        assert_eq!(info.hostclass, "error");
-        assert_eq!(info.version, "error");
-        assert_eq!(info.repo, "error");
-        assert_eq!(info.disk_usage, "error");
-        assert_eq!(info.mem_usage, "error");
+    fn malformed_output_yields_none() {
+        assert!(parse_compound_output("garbage").is_none());
     }
 
     #[test]
