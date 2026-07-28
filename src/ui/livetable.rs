@@ -1,5 +1,5 @@
 use crate::executor::{self, ExecResult};
-use crate::ui::stream::{SPINNER_FRAMES, TICK_INTERVAL, collect_results};
+use crate::ui::stream::{TICK_INTERVAL, collect_results};
 use crate::ui::styles;
 use anyhow::Result;
 use comfy_table::{ContentArrangement, Table};
@@ -51,10 +51,8 @@ fn render_table(spec: &TableSpec, rows: Vec<Vec<String>>, max_width: Option<u16>
 /// redrawing in place as hosts complete (TTY). On a non-TTY it renders the
 /// final table once after all hosts finish.
 pub fn run_live_table(hosts: &[String], command: &str, spec: TableSpec) -> Result<Vec<ExecResult>> {
-    executor::verify_hosts_and_command(hosts, command)?;
-
     let start = Instant::now();
-    let rx = executor::run_parallel(hosts, command);
+    let rx = executor::run_parallel(hosts, command)?;
 
     if !styles::is_terminal() {
         let mut results: Vec<Option<ExecResult>> = hosts.iter().map(|_| None).collect();
@@ -76,15 +74,18 @@ pub fn run_live_table(hosts: &[String], command: &str, spec: TableSpec) -> Resul
     let term_width = console::Term::stdout().size().1;
     let mut results: Vec<Option<ExecResult>> = hosts.iter().map(|_| None).collect();
     let mut remaining = hosts.len();
-    let mut frame = 0usize;
+    let mut frame = 0u64;
 
-    let build_rows = |results: &[Option<ExecResult>], frame: usize| -> Vec<Vec<String>> {
+    // The running-row spinner glyphs come from indicatif's default spinner;
+    // get_tick_str wraps the index, so frame just increments forever.
+    let spinner = ProgressStyle::default_spinner();
+    let build_rows = |results: &[Option<ExecResult>], frame: u64| -> Vec<Vec<String>> {
         results
             .iter()
             .enumerate()
             .map(|(i, result)| match result {
                 Some(r) => (spec.completed_row)(r),
-                None => (spec.running_row)(&hosts[i], SPINNER_FRAMES[frame], start.elapsed()),
+                None => (spec.running_row)(&hosts[i], spinner.get_tick_str(frame), start.elapsed()),
             })
             .collect()
     };
@@ -101,7 +102,7 @@ pub fn run_live_table(hosts: &[String], command: &str, spec: TableSpec) -> Resul
                 remaining -= 1;
             }
             Err(RecvTimeoutError::Timeout) => {
-                frame = (frame + 1) % SPINNER_FRAMES.len();
+                frame += 1;
             }
             Err(RecvTimeoutError::Disconnected) => break,
         }

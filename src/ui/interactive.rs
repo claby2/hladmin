@@ -7,7 +7,11 @@ use anyhow::{Result, bail};
 /// styled header and completion marker around each run. The child process
 /// (ssh -t) owns the terminal, so no animation is used.
 pub fn run_interactive(hosts: &[String], command: &str) -> Result<()> {
-    executor::verify_hosts_and_command(hosts, command)?;
+    // Without this check an empty host list would silently succeed; the
+    // per-host command validation lives in executor::run_interactive.
+    if hosts.is_empty() {
+        bail!("at least one hostname must be specified");
+    }
 
     for (i, hostname) in hosts.iter().enumerate() {
         if i > 0 {

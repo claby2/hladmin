@@ -11,10 +11,10 @@ pub struct HostConfig {
 }
 
 fn config_dir() -> Option<PathBuf> {
-    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
-        if !xdg.is_empty() {
-            return Some(PathBuf::from(xdg).join("hladmin"));
-        }
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME")
+        && !xdg.is_empty()
+    {
+        return Some(PathBuf::from(xdg).join("hladmin"));
     }
     let home = std::env::var_os("HOME")?;
     if home.is_empty() {
@@ -54,9 +54,14 @@ fn parse_config(contents: &str) -> Result<HostConfig> {
 
     for (i, raw_line) in contents.lines().enumerate() {
         let line_num = i + 1;
-        let line = raw_line.trim();
+        // Everything from the first '#' is a comment, whether it starts the
+        // line or follows a directive.
+        let line = raw_line
+            .find('#')
+            .map_or(raw_line, |pos| &raw_line[..pos])
+            .trim();
 
-        if line.is_empty() || line.starts_with('#') {
+        if line.is_empty() {
             continue;
         }
 
@@ -87,10 +92,10 @@ fn parse_config(contents: &str) -> Result<HostConfig> {
         }
     }
 
-    if let Some(default) = &config.default_group {
-        if !config.groups.contains_key(default) {
-            bail!("default group '{default}' is not defined");
-        }
+    if let Some(default) = &config.default_group
+        && !config.groups.contains_key(default)
+    {
+        bail!("default group '{default}' is not defined");
     }
 
     Ok(config)
@@ -102,14 +107,17 @@ impl HostConfig {
     /// when configured, otherwise an empty list is returned.
     pub fn resolve_hosts(&self, args: &[String]) -> Result<Vec<String>> {
         if args.is_empty() {
-            if let Some(default) = &self.default_group {
-                if let Some(hosts) = self.groups.get(default) {
-                    return Ok(hosts.clone());
-                }
+            if let Some(default) = &self.default_group
+                && let Some(hosts) = self.groups.get(default)
+            {
+                return Ok(hosts.clone());
             }
             return Ok(Vec::new());
         }
 
+        // The Vec keeps first-occurrence order — output blocks and table rows
+        // appear in the order the user listed hosts — while the HashSet makes
+        // the dedup check O(1).
         let mut resolved = Vec::new();
         let mut seen = HashSet::new();
 
@@ -151,6 +159,12 @@ mod tests {
         assert_eq!(cfg.groups["servers"], strs(&["a", "b", "c"]));
         assert_eq!(cfg.groups["desktops"], strs(&["d"]));
         assert_eq!(cfg.default_group.as_deref(), Some("servers"));
+    }
+
+    #[test]
+    fn parses_middle_comments() {
+        let cfg = parse_config("group servers a # comment\n").unwrap();
+        assert_eq!(cfg.groups["servers"], strs(&["a"]));
     }
 
     #[test]

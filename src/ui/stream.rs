@@ -2,38 +2,31 @@ use crate::executor::{self, ExecResult};
 use crate::ui::render::{format_duration, render_result_block};
 use crate::ui::styles;
 use anyhow::Result;
-use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget};
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::{Duration, Instant};
 
 /// Spinner cadence shared by the streaming and live-table views.
 pub const TICK_INTERVAL: Duration = Duration::from_millis(100);
 
-/// Braille dot spinner frames.
-pub const SPINNER_FRAMES: [&str; 8] = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
-
 /// Executes command on hosts in parallel. On a TTY it shows a live spinner block
 /// for running hosts and streams each host's output block into scrollback as it
 /// completes. On a non-TTY it prints each block as it finishes with no animation.
 pub fn run_streaming(hosts: &[String], command: &str) -> Result<Vec<ExecResult>> {
-    executor::verify_hosts_and_command(hosts, command)?;
-
     if !styles::is_terminal() {
-        return Ok(run_streaming_plain(hosts, command));
+        return run_streaming_plain(hosts, command);
     }
 
     let start = Instant::now();
-    let rx = executor::run_parallel(hosts, command);
+    let rx = executor::run_parallel(hosts, command)?;
 
     let mp = MultiProgress::with_draw_target(ProgressDrawTarget::stdout());
-    let style = ProgressStyle::with_template("{spinner} {msg}")
-        .expect("valid template")
-        .tick_strings(&["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷", "⣷"]);
+    // new_spinner comes preconfigured with indicatif's default spinner style,
+    // whose template is exactly the "{spinner} {msg}" layout used here.
     let bars: Vec<ProgressBar> = hosts
         .iter()
         .map(|host| {
             let pb = mp.add(ProgressBar::new_spinner());
-            pb.set_style(style.clone());
             pb.set_message(running_message(host, start));
             pb
         })
@@ -72,9 +65,9 @@ fn running_message(host: &str, start: Instant) -> String {
     )
 }
 
-fn run_streaming_plain(hosts: &[String], command: &str) -> Vec<ExecResult> {
+fn run_streaming_plain(hosts: &[String], command: &str) -> Result<Vec<ExecResult>> {
     let start = Instant::now();
-    let rx = executor::run_parallel(hosts, command);
+    let rx = executor::run_parallel(hosts, command)?;
     let mut results: Vec<Option<ExecResult>> = hosts.iter().map(|_| None).collect();
     for _ in hosts {
         let Ok((i, result)) = rx.recv() else { break };
@@ -82,7 +75,7 @@ fn run_streaming_plain(hosts: &[String], command: &str) -> Vec<ExecResult> {
         println!();
         results[i] = Some(result);
     }
-    collect_results(results, hosts, command, start)
+    Ok(collect_results(results, hosts, command, start))
 }
 
 /// Unwraps per-host results, substituting an error result for any host whose

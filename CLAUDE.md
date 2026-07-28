@@ -67,7 +67,7 @@ hladmin/
 │   │   ├── push_staged.rs     # Push local staged changes to remote hosts
 │   │   └── resolve.rs         # Show host configuration and resolve groups
 │   ├── config.rs              # Host groups and config file parsing
-│   ├── executor.rs            # Command execution engine (local bash / ssh, parallel threads)
+│   ├── executor.rs            # Command execution engine (local sh / ssh, parallel threads)
 │   └── ui/
 │       ├── styles.rs          # console-based color palette, NO_COLOR handling, TTY detection
 │       ├── render.rs          # format_duration, result blocks with per-host prefixes
@@ -115,18 +115,19 @@ host completion.
 ### Execution Engine (`src/executor.rs`)
 
 - **`ExecResult`**: hostname, command, stdout/stderr, optional error string, duration
-- **`run_on_host()`**: captures output; `bash -c "command"` for `localhost`, `ssh hostname "command"` for remote hosts
+- **`run_on_host()`**: captures output; `sh -c "command"` for `localhost`, `ssh hostname "command"` for remote hosts
 - **`run_interactive()`**: inherits stdio; `ssh -t hostname "command"` for remote hosts
-- **`run_parallel()`**: one thread per host, completions reported over an mpsc channel as `(input index, result)`
+- **`run_parallel()`**: validates hosts/command, then one thread per host, completions reported over an mpsc channel as `(input index, result)`
 - **`results_error()`**: first error in input order propagates to the exit code
-- **Error text**: `error executing on <host>: exit status <n>` (Go os/exec-compatible phrasing)
+- **Error text**: `error executing on <host>: exit status: <n>` (std `ExitStatus` Display)
 
 ### Terminal UI (`src/ui/`)
 
 Three modes:
 
 1. **Streaming** (`stream.rs`, used by exec/pull): an indicatif `MultiProgress`
-   shows one braille-spinner line per running host (`⣾ hostname  elapsed`);
+   shows one spinner line per running host (`<spinner> hostname  elapsed`,
+   using indicatif's default spinner frames);
    each completed host's block is pushed into scrollback via `MultiProgress::println`.
    Block format: `===» host` / `cmd: <command>` / `host | <line>` prefixed output /
    green `✓ done <duration>` or red error footer.
@@ -160,7 +161,8 @@ finish, the table renders once at the end.
 - **pull**: parallel streaming `cd $HOME/nix-config && git pull`.
 - **push-staged**: local `git diff --cached --binary`, per-host clean check
   (`git status --porcelain`), scp patch to `/tmp/hladmin-patch-<host>-<pid>.patch`,
-  `git apply`, unconditional remote cleanup. `--dry-run`/-n previews. Per-host
+  `git apply`, unconditional remote cleanup. `--dry-run`/-n previews. `localhost`
+  is skipped with a message (the staged changes originate there). Per-host
   errors print inline and never abort other hosts.
 - **resolve**: shows config path, groups (file order), default group; with args,
   shows per-@group expansion and the final deduplicated host list.

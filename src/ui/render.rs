@@ -2,6 +2,8 @@ use crate::executor::ExecResult;
 use crate::ui::styles;
 use std::time::Duration;
 
+// Hand-rolled because std's Duration has no Display and its Debug output
+// ("63s") lacks the compact "1m03s" style.
 /// Renders a duration compactly, e.g. "4.2s" or "1m03s".
 pub fn format_duration(d: Duration) -> String {
     if d < Duration::from_secs(60) {
