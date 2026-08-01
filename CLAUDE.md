@@ -157,8 +157,13 @@ finish, the table renders once at the end.
   disk %, memory %). Cross-platform memory detection (Linux `free` vs macOS
   `vm_stat`). VERSION cell is green when it matches REPO, else yellow; parse
   failures render "error" in every column.
-- **rebuild**: interactive `cd $HOME/nix-config && ./rebuild.sh`; `--remote`
-  appends ` --remote`.
+- **rebuild**: two phases by default — parallel streaming
+  `cd $HOME/nix-config && ./rebuild.sh --build-only` (nh builds need no sudo),
+  then sequential interactive `./rebuild.sh` per host (build is a cache hit, so
+  it goes straight to sudo's inline prompt and activation). Build failures skip
+  that host's activation; activation failures don't abort remaining hosts;
+  first error (input order) sets the exit code. `-i` runs the old fully
+  sequential interactive mode. `--remote` appends ` --remote` in both phases.
 - **pull**: parallel streaming `cd $HOME/nix-config && git pull`.
 - **push-staged**: local `git diff --cached --binary`, per-host clean check
   (`git status --porcelain`), scp patch to `/tmp/hladmin-patch-<host>-<pid>.patch`,

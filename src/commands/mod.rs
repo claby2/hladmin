@@ -20,7 +20,11 @@ pub fn dispatch(command: Commands) -> Result<()> {
             command,
         } => exec::run(interactive, &hosts, &command),
         Commands::Status { hosts } => status::run(&hosts),
-        Commands::Rebuild { remote, hosts } => rebuild::run(remote, &hosts),
+        Commands::Rebuild {
+            remote,
+            interactive,
+            hosts,
+        } => rebuild::run(remote, interactive, &hosts),
         Commands::Pull { hosts } => pull::run(&hosts),
         Commands::PushStaged { dry_run, hosts } => push_staged::run(dry_run, &hosts),
         Commands::Reset { yes, hosts } => reset::run(yes, &hosts),
