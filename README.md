@@ -92,7 +92,9 @@ hladmin exec localhost server1 -- systemctl status nginx
 
 #### rebuild
 
-Execute the rebuild script (`$HOME/nix-config/rebuild.sh`) on specified hosts. By default this runs in two phases: all hosts build in parallel (`./rebuild.sh --build-only`, no sudo required), then each host activates sequentially with direct terminal interaction so sudo can prompt for its password. Because the build is already cached, the activation pass takes only seconds per host. A failed build skips that host's activation; a failed activation doesn't stop the remaining hosts.
+Execute the rebuild script (`$HOME/nix-config/rebuild.sh`) on specified hosts. By default this runs in two phases: all hosts build in parallel (`./rebuild.sh --build-only`, no sudo required) behind a live status table showing each host's build state and elapsed time, then each host activates sequentially with direct terminal interaction so sudo can prompt for its password. Because the build is already cached, the activation pass takes only seconds per host. A failed build skips that host's activation; a failed activation doesn't stop the remaining hosts.
+
+After the build table, failed hosts print their full build output; successful hosts print nothing — the activation pass replays the already-cached build, so its diff output (what changed) appears there. Pass `-v` to see full build output for every host.
 
 The parallel build phase requires a `rebuild.sh` that understands `--build-only` — run `hladmin pull` first if hosts have an older copy.
 
@@ -114,6 +116,7 @@ hladmin rebuild localhost
 
 - `--remote`: Pass `--remote` to rebuild.sh (build on the remote build host)
 - `-i, --interactive`: Rebuild hosts fully sequentially with direct stdin/stdout/stderr
+- `-v, --verbose`: Print full build output for every host, not just failures
 
 #### pull
 

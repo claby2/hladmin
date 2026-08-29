@@ -32,7 +32,7 @@ cargo run -- <command> [flags] [hosts...]
 cargo test
 ```
 
-Unit tests cover config parsing/resolution, duration formatting, and status/reset output parsing. End-to-end behavior relies on manual testing across different host types.
+Unit tests cover config parsing/resolution, duration formatting, output sanitizing, and status/reset output parsing. End-to-end behavior relies on manual testing across different host types.
 
 ### Formatting and Linting
 
@@ -62,7 +62,7 @@ hladmin/
 │   │   ├── mod.rs             # dispatch() plus shared helpers resolve_hosts()/stream_command()
 │   │   ├── exec.rs            # Execute arbitrary commands on hosts (-- separator handling)
 │   │   ├── status.rs          # System status in a live columnar table
-│   │   ├── rebuild.rs         # Run rebuild.sh script interactively
+│   │   ├── rebuild.rs         # Two-phase rebuild: live build table, sequential activation
 │   │   ├── pull.rs            # Execute git pull operations
 │   │   ├── push_staged.rs     # Push local staged changes to remote hosts
 │   │   ├── reset.rs           # Hard-reset remote nix-config repos to origin/main
@@ -72,6 +72,7 @@ hladmin/
 │   └── ui/
 │       ├── styles.rs          # console-based color palette, NO_COLOR handling, TTY detection
 │       ├── render.rs          # format_duration, result blocks with per-host prefixes
+│       ├── sanitize.rs        # strip/replay terminal control sequences in captured output
 │       ├── stream.rs          # indicatif MultiProgress: per-host spinners + scrollback blocks
 │       ├── livetable.rs       # comfy-table live table redrawn in place (TableSpec)
 │       └── interactive.rs     # Sequential execution with inherited stdio
@@ -128,11 +129,13 @@ Three modes:
 
 1. **Streaming** (`stream.rs`, used by exec/pull): an indicatif `MultiProgress`
    shows one spinner line per running host (`<spinner> hostname  elapsed`,
-   using indicatif's default spinner frames);
+   using indicatif's default spinner frames) plus, for multi-host runs, a
+   `n/m done · elapsed` summary line below the spinners;
    each completed host's block is pushed into scrollback via `MultiProgress::println`.
    Block format: `===» host` / `cmd: <command>` / `host | <line>` prefixed output /
    green `✓ done <duration>` or red error footer.
-2. **Live table** (`livetable.rs`, used by status): one hidden indicatif bar is
+2. **Live table** (`livetable.rs`, used by status and rebuild's build phase):
+   one hidden indicatif bar is
    used as a multi-line redraw region; every tick the whole table is rebuilt with
    comfy-table and set as the bar's message. The caller supplies a `TableSpec`
    (headers + completed_row/running_row closures) so command code owns column
@@ -140,6 +143,15 @@ Three modes:
 3. **Interactive** (`interactive.rs`, used by rebuild/exec -i): sequential
    execution with inherited stdio; the child (ssh -t) owns the terminal, so no
    animation library is involved. First failure aborts remaining hosts.
+
+**Output sanitizing** (`sanitize.rs`): captured output is sanitized in
+`render_result_block` before prefixing. Tools like nh/nix emit live-progress
+control sequences even when piped (`ESC[1G`/`ESC[2K` redraw frames, hide-cursor,
+synchronized-update mode); replayed verbatim they erase the `host |` prefixes
+and corrupt indicatif's draw-region bookkeeping. The sanitizer rebuilds the
+text a terminal would be left showing: `\r` and in-line erase/column-reset
+sequences restart the current line (a progress animation collapses to its final
+frame) and all other escape sequences, including colors, are stripped.
 
 **Color/TTY policy** (`styles.rs`): decided once at startup — colors only when
 stdout is a TTY and neither `NO_COLOR` nor `HLADMIN_NO_COLOR` is set (non-empty).
@@ -157,13 +169,22 @@ finish, the table renders once at the end.
   disk %, memory %). Cross-platform memory detection (Linux `free` vs macOS
   `vm_stat`). VERSION cell is green when it matches REPO, else yellow; parse
   failures render "error" in every column.
-- **rebuild**: two phases by default — parallel streaming
-  `cd $HOME/nix-config && ./rebuild.sh --build-only` (nh builds need no sudo),
-  then sequential interactive `./rebuild.sh` per host (build is a cache hit, so
-  it goes straight to sudo's inline prompt and activation). Build failures skip
-  that host's activation; activation failures don't abort remaining hosts;
-  first error (input order) sets the exit code. `-i` runs the old fully
-  sequential interactive mode. `--remote` appends ` --remote` in both phases.
+- **rebuild**: two phases by default, each announced with a
+  `── Phase n/2: ... ──` banner. Phase 1 runs
+  `cd $HOME/nix-config && ./rebuild.sh --build-only` on all hosts in parallel
+  (nh builds need no sudo) behind a live HOSTNAME/STATUS/TIME table instead of
+  streaming nh's noisy output; STATUS shows `✓ built` or `✗ build failed`.
+  After the table, failed hosts print their full sanitized output; successful
+  hosts print nothing — the activation pass replays the cached build, so nh's
+  closure diff appears there. `-v`/`--verbose` prints full build output for
+  every host. hladmin deliberately does not parse nh's output semantics (diff
+  markers, "no changes" wording); it only reacts to exit codes.
+  Phase 2 runs sequential interactive `./rebuild.sh` per host with a `[i/n]`
+  header (build is a cache hit, so it goes straight to sudo's inline prompt and
+  activation). Build failures skip that host's activation; activation failures
+  don't abort remaining hosts; first error (input order) sets the exit code.
+  `-i` runs the old fully sequential interactive mode. `--remote` appends
+  ` --remote` in both phases.
 - **pull**: parallel streaming `cd $HOME/nix-config && git pull`.
 - **push-staged**: local `git diff --cached --binary`, per-host clean check
   (`git status --porcelain`), scp patch to `/tmp/hladmin-patch-<host>-<pid>.patch`,

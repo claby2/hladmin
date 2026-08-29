@@ -41,10 +41,12 @@ pub enum Commands {
     /// Run rebuild script on specified hosts
     #[command(
         long_about = "Execute the rebuild.sh script in $HOME/nix-config on each host. \
-                            Builds all hosts in parallel (no sudo required), then activates \
-                            sequentially so sudo can prompt on each host in turn. Use \
-                            --interactive for fully sequential rebuilds. Use @group to \
-                            reference host groups from config."
+                            Builds all hosts in parallel (no sudo required), showing a live \
+                            status table, then activates sequentially so sudo can prompt on \
+                            each host in turn. Failed builds print their full output \
+                            (--verbose prints it for every host). Use --interactive for \
+                            fully sequential rebuilds. Use @group to reference host groups \
+                            from config."
     )]
     Rebuild {
         /// Pass --remote flag to rebuild.sh
@@ -53,6 +55,9 @@ pub enum Commands {
         /// Rebuild hosts sequentially with direct stdin/stdout/stderr
         #[arg(short, long)]
         interactive: bool,
+        /// Print full build output for every host, not just failures
+        #[arg(short, long)]
+        verbose: bool,
         /// Hostnames or @group references
         #[arg(value_name = "HOST")]
         hosts: Vec<String>,

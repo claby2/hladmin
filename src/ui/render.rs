@@ -1,4 +1,5 @@
 use crate::executor::ExecResult;
+use crate::ui::sanitize::sanitize;
 use crate::ui::styles;
 use std::time::Duration;
 
@@ -13,19 +14,27 @@ pub fn format_duration(d: Duration) -> String {
     format!("{}m{:02}s", total / 60, total % 60)
 }
 
+/// Renders the "===» host" banner line.
+pub fn host_header(hostname: &str) -> String {
+    format!(
+        "{} {}",
+        styles::header().apply_to("===»"),
+        styles::hostname().apply_to(hostname)
+    )
+}
+
 /// Renders the "===» host" / "cmd: ..." banner for a host.
 pub fn result_header(hostname: &str, command: &str) -> String {
     format!(
-        "{} {}\n{} {}",
-        styles::header().apply_to("===»"),
-        styles::hostname().apply_to(hostname),
+        "{}\n{} {}",
+        host_header(hostname),
         styles::secondary().apply_to("cmd:"),
         command
     )
 }
 
 /// Renders output with a per-line "host |" prefix, without a trailing newline.
-fn prefixed_output(hostname: &str, output: &str) -> String {
+pub fn prefixed_output(hostname: &str, output: &str) -> String {
     let prefix = format!(
         "{} {} ",
         styles::hostname().apply_to(hostname),
@@ -51,13 +60,18 @@ fn prefixed_output(hostname: &str, output: &str) -> String {
 pub fn render_result_block(result: &ExecResult) -> String {
     let mut out = result_header(&result.hostname, &result.command);
 
-    if !result.stdout.is_empty() {
+    // Captured output may contain live-progress control sequences (nh, nix);
+    // sanitize before prefixing so replayed frames can't erase the prefixes
+    // or break indicatif's scrollback handling.
+    let stdout = sanitize(&result.stdout);
+    let stderr = sanitize(&result.stderr);
+    if !stdout.is_empty() {
         out.push('\n');
-        out.push_str(&prefixed_output(&result.hostname, &result.stdout));
+        out.push_str(&prefixed_output(&result.hostname, &stdout));
     }
-    if !result.stderr.is_empty() {
+    if !stderr.is_empty() {
         out.push('\n');
-        out.push_str(&prefixed_output(&result.hostname, &result.stderr));
+        out.push_str(&prefixed_output(&result.hostname, &stderr));
     }
 
     let dur = styles::secondary().apply_to(format_duration(result.duration));

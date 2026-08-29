@@ -23,8 +23,9 @@ pub fn dispatch(command: Commands) -> Result<()> {
         Commands::Rebuild {
             remote,
             interactive,
+            verbose,
             hosts,
-        } => rebuild::run(remote, interactive, &hosts),
+        } => rebuild::run(remote, interactive, verbose, &hosts),
         Commands::Pull { hosts } => pull::run(&hosts),
         Commands::PushStaged { dry_run, hosts } => push_staged::run(dry_run, &hosts),
         Commands::Reset { yes, hosts } => reset::run(yes, &hosts),

@@ -2,7 +2,7 @@ use crate::executor::{self, ExecResult};
 use crate::ui::render::{format_duration, render_result_block};
 use crate::ui::styles;
 use anyhow::Result;
-use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::{Duration, Instant};
 
@@ -32,6 +32,22 @@ pub fn run_streaming(hosts: &[String], command: &str) -> Result<Vec<ExecResult>>
         })
         .collect();
 
+    // A single-host run needs no tally; for multiple hosts a summary line
+    // below the spinners keeps overall progress visible even once completed
+    // blocks start filling the scrollback.
+    let summary = (hosts.len() > 1).then(|| {
+        let pb = mp.add(ProgressBar::new_spinner());
+        pb.set_style(ProgressStyle::with_template("{msg}").expect("valid template"));
+        pb
+    });
+    let update_summary = |done: usize| {
+        if let Some(pb) = &summary {
+            pb.set_message(summary_message(done, hosts.len(), start));
+            pb.tick();
+        }
+    };
+    update_summary(0);
+
     let mut results: Vec<Option<ExecResult>> = hosts.iter().map(|_| None).collect();
     let mut remaining = hosts.len();
     while remaining > 0 {
@@ -41,6 +57,7 @@ pub fn run_streaming(hosts: &[String], command: &str) -> Result<Vec<ExecResult>>
                 let _ = mp.println(render_result_block(&result));
                 results[i] = Some(result);
                 remaining -= 1;
+                update_summary(hosts.len() - remaining);
             }
             Err(RecvTimeoutError::Timeout) => {
                 for (i, pb) in bars.iter().enumerate() {
@@ -49,12 +66,25 @@ pub fn run_streaming(hosts: &[String], command: &str) -> Result<Vec<ExecResult>>
                         pb.tick();
                     }
                 }
+                update_summary(hosts.len() - remaining);
             }
             Err(RecvTimeoutError::Disconnected) => break,
         }
     }
+    if let Some(pb) = &summary {
+        pb.finish_and_clear();
+    }
 
     Ok(collect_results(results, hosts, command, start))
+}
+
+fn summary_message(done: usize, total: usize, start: Instant) -> String {
+    styles::secondary()
+        .apply_to(format!(
+            "{done}/{total} done · {}",
+            format_duration(start.elapsed())
+        ))
+        .to_string()
 }
 
 fn running_message(host: &str, start: Instant) -> String {
