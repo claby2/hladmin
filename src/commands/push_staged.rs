@@ -1,4 +1,5 @@
 use crate::commands::resolve_hosts;
+use crate::hostid;
 use crate::ui::styles;
 use anyhow::{Result, bail};
 use std::io::Write;
@@ -83,11 +84,13 @@ fn write_patch_file(diff: &[u8]) -> Result<NamedTempFile> {
 /// Prints its own status lines; errors never propagate so other hosts still run.
 fn push_to_host(hostname: &str, patch_path: &Path, dry_run: bool) {
     // The staged changes were generated from this machine's nix-config, so
-    // pushing them back to localhost is meaningless (and would require sshd).
-    if hostname == "localhost" {
+    // pushing them back to this same machine is meaningless (and would require sshd).
+    if hostid::is_self(hostname) {
         println!(
             "{}",
-            styles::info().apply_to("  Skipping localhost: staged changes originate here")
+            styles::info().apply_to(format!(
+                "  Skipping {hostname}: staged changes originate here"
+            ))
         );
         return;
     }
@@ -152,13 +155,13 @@ fn push_to_host(hostname: &str, patch_path: &Path, dry_run: bool) {
 
     let (apply_output, apply_err) = run_combined(&mut ssh_command(
         hostname,
-        &format!("cd $HOME/nix-config && git apply {remote_patch_file}"),
+        &format!("cd $HOME/nix-config && git apply '{remote_patch_file}'"),
     ));
 
     // Always clean up the remote patch file, regardless of git apply result.
     let _ = run_quiet(&mut ssh_command(
         hostname,
-        &format!("rm -f {remote_patch_file}"),
+        &format!("rm -f '{remote_patch_file}'"),
     ));
 
     if let Some(err) = apply_err {

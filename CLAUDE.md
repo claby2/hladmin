@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`hladmin` is a homelab administration tool built in Rust using the clap CLI framework. It manages NixOS servers and macOS machines running nix-darwin by executing commands remotely via SSH or locally using `localhost` as the hostname.
+`hladmin` is a homelab administration tool built in Rust using the clap CLI framework. It manages NixOS servers and macOS machines running nix-darwin by executing commands remotely via SSH, or locally when the target is the machine hladmin is running on (see `src/hostid.rs`).
 
 ## Development Commands
 
@@ -111,13 +111,13 @@ host completion.
 - **Individual hosts**: Specified directly by hostname
 - **Group references**: `@groupname` expands to all hosts in group
 - **Default handling**: Empty args use default group if configured
-- **Deduplication**: Automatic removal of duplicate hostnames (first-occurrence order)
+- **Deduplication**: Automatic removal of duplicate hostnames (first-occurrence order), keyed on `hostid::host_key` so every spelling of the local machine collapses to one entry
 - **Validation**: Unknown groups return errors
 
 ### Execution Engine (`src/executor.rs`)
 
 - **`ExecResult`**: hostname, command, stdout/stderr, optional error string, duration
-- **`run_on_host()`**: captures output; `sh -c "command"` for `localhost`, `ssh hostname "command"` for remote hosts
+- **`run_on_host()`**: captures output; `sh -c "command"` when `hostid::is_self(hostname)`, `ssh hostname "command"` otherwise
 - **`run_interactive()`**: inherits stdio; `ssh -t hostname "command"` for remote hosts
 - **`run_parallel()`**: validates hosts/command, then one thread per host, completions reported over an mpsc channel as `(input index, result)`
 - **`results_error()`**: first error in input order propagates to the exit code
@@ -188,17 +188,21 @@ finish, the table renders once at the end.
 - **pull**: parallel streaming `cd $HOME/nix-config && git pull`.
 - **push-staged**: local `git diff --cached --binary`, per-host clean check
   (`git status --porcelain`), scp patch to `/tmp/hladmin-patch-<host>-<pid>.patch`,
-  `git apply`, unconditional remote cleanup. `--dry-run`/-n previews. `localhost`
-  is skipped with a message (the staged changes originate there). Per-host
+  `git apply`, unconditional remote cleanup. `--dry-run`/-n previews. The machine
+  hladmin runs on is skipped with a message (the staged changes originate
+  there). Per-host
   errors print inline and never abort other hosts.
 - **reset**: quiet parallel pre-check (`git status --porcelain=v1 -b`) detects
   work a hard reset would destroy (dirty entries or `[ahead N]` unpushed
   commits); prompts y/N only when something would be lost (`-y`/`--yes` skips,
   non-TTY stdin without `--yes` errors). Then parallel streaming
   `git fetch origin && git checkout -f main && git reset --hard origin/main &&
-  git clean -fd`. `localhost` is skipped (staged changes originate there).
+  git clean -fd`. The machine hladmin runs on is skipped (a reset there would
+  discard local work).
   Pre-check failures skip that host and fail the exit code.
-- **resolve**: shows config path, groups (file order), default group; with args,
+- **resolve**: shows config path, detected self identity and its source, groups
+  (file order, self marked), default group; warns when self matches nothing in
+  the config or when several entries name it; with args,
   shows per-@group expansion and the final deduplicated host list.
 
 ### Error Handling Philosophy
@@ -225,7 +229,7 @@ Create `~/.config/hladmin/hosts` to define host groups:
 # Example configuration
 group servers altaria onix golem
 group desktops machamp laptop
-group all altaria onix golem machamp laptop localhost
+group all altaria onix golem machamp laptop
 default all
 ```
 

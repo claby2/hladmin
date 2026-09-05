@@ -1,5 +1,6 @@
 use crate::commands::resolve_hosts;
 use crate::executor::{self, ExecResult};
+use crate::hostid;
 use crate::ui::livetable::{TableSpec, run_live_table};
 use crate::ui::render::format_duration;
 use crate::ui::styles;
@@ -77,6 +78,18 @@ fn result_to_host_info(result: &ExecResult) -> Option<HostInfo> {
     parse_compound_output(&result.stdout)
 }
 
+/// The HOSTNAME cell, marking the machine hladmin is running on. With one
+/// config shared fleet-wide the same table is produced from every host, so the
+/// marker is what tells you whose view you are looking at. comfy-table measures
+/// cell widths ANSI-aware, so the styled marker does not disturb the layout.
+fn hostname_cell(hostname: &str) -> String {
+    if hostid::is_self(hostname) {
+        format!("{hostname} {}", styles::secondary().apply_to("(self)"))
+    } else {
+        hostname.to_string()
+    }
+}
+
 /// Defines the status table columns and per-host cell rendering.
 fn status_table_spec() -> TableSpec {
     TableSpec {
@@ -84,7 +97,7 @@ fn status_table_spec() -> TableSpec {
         completed_row: Box::new(|result| {
             let Some(info) = result_to_host_info(result) else {
                 let error_cell = || styles::error().apply_to("error").to_string();
-                let mut row = vec![result.hostname.clone()];
+                let mut row = vec![hostname_cell(&result.hostname)];
                 row.resize_with(6, error_cell);
                 return row;
             };
@@ -96,7 +109,7 @@ fn status_table_spec() -> TableSpec {
             };
 
             vec![
-                result.hostname.clone(),
+                hostname_cell(&result.hostname),
                 info.hostclass,
                 version_style.apply_to(&info.version).to_string(),
                 styles::success().apply_to(&info.repo).to_string(),
@@ -112,7 +125,7 @@ fn status_table_spec() -> TableSpec {
                 ))
                 .to_string();
             vec![
-                host.to_string(),
+                hostname_cell(host),
                 indicator,
                 String::new(),
                 String::new(),

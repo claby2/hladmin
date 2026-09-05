@@ -46,7 +46,10 @@ cargo build --release
 hladmin <command> [flags] [hostname1] [hostname2] ...
 ```
 
-For local execution, use `localhost` as the hostname.
+Name hosts by their real hostnames. hladmin detects which machine it is running
+on and executes there through a local shell instead of over SSH, so the same
+hosts file works unchanged on every machine in the fleet. `localhost` still
+works as an alias for the current machine.
 
 ### Commands
 
@@ -58,17 +61,17 @@ Display system information for specified hosts in a tabular format.
 # Check status of multiple hosts
 hladmin status server1 server2 desktop1
 
-# Check local system status
-hladmin status localhost
+# Check the machine you are on (detected automatically)
+hladmin status desktop1
 ```
 
 **Example output:**
 
 ```
-HOSTNAME   HOSTCLASS  VERSION                                   REPO                                      DISK  MEM
-localhost  mac        6f88686d63493d507e6c1e4e47f1e22cab8dac13  6f88686d63493d507e6c1e4e47f1e22cab8dac13  3%    47%
-altaria    server     6f88686d63493d507e6c1e4e47f1e22cab8dac13  6f88686d63493d507e6c1e4e47f1e22cab8dac13  17%   46%
-onix       server     6f88686d63493d507e6c1e4e47f1e22cab8dac13  6f88686d63493d507e6c1e4e47f1e22cab8dac13  43%   25%
+HOSTNAME         HOSTCLASS  VERSION                                   REPO                                      DISK  MEM
+desktop1 (self)  mac        6f88686d63493d507e6c1e4e47f1e22cab8dac13  6f88686d63493d507e6c1e4e47f1e22cab8dac13  3%    47%
+altaria          server     6f88686d63493d507e6c1e4e47f1e22cab8dac13  6f88686d63493d507e6c1e4e47f1e22cab8dac13  17%   46%
+onix             server     6f88686d63493d507e6c1e4e47f1e22cab8dac13  6f88686d63493d507e6c1e4e47f1e22cab8dac13  43%   25%
 ```
 
 #### exec
@@ -82,8 +85,8 @@ hladmin exec server1 server2 -- uptime
 # Execute interactively (with stdin/stdout/stderr)
 hladmin exec --interactive server1 server2 -- htop
 
-# Mix local and remote execution
-hladmin exec localhost server1 -- systemctl status nginx
+# Mix local and remote execution (desktop1 is the machine you are on)
+hladmin exec desktop1 server1 -- systemctl status nginx
 ```
 
 **Flags:**
@@ -108,8 +111,8 @@ hladmin rebuild server1 server2 desktop1
 # Rebuild fully sequentially with direct terminal interaction
 hladmin rebuild -i server1 server2
 
-# Rebuild local system
-hladmin rebuild localhost
+# Rebuild the machine you are on
+hladmin rebuild desktop1
 ```
 
 **Flags:**
@@ -126,8 +129,8 @@ Execute `git pull` in the `$HOME/nix-config` directory on specified hosts. Runs 
 # Pull latest changes on multiple hosts
 hladmin pull server1 server2 desktop1
 
-# Pull on local system
-hladmin pull localhost
+# Pull on the machine you are on
+hladmin pull desktop1
 ```
 
 #### push-staged
@@ -145,6 +148,7 @@ hladmin push-staged --dry-run server1 server2
 **Features:**
 
 - Only pushes changes to hosts with clean git repositories
+- Skips the machine you are on (your staged changes originate there)
 - Creates temporary patch files for secure transfer
 - Supports dry-run mode for testing
 
@@ -170,7 +174,7 @@ hladmin push-staged @servers
 **Features:**
 
 - Only prompts for confirmation when uncommitted changes, untracked files, or unpushed commits would actually be destroyed (shows exactly what, per host)
-- Skips `localhost` (your staged changes originate there)
+- Skips the machine you are on (a reset there would discard your local work)
 - Gitignored files are untouched (no `git clean -x`)
 
 **Flags:**
@@ -273,6 +277,38 @@ group all server1 server2 server3 desktop1 laptop1
 default servers
 ```
 
+**One file, every machine.** Name hosts by their real hostnames and this file can
+be byte-identical everywhere — check it into your nix-config and deploy the same
+copy to every host. There is no `localhost` entry and no per-machine variant:
+hladmin compares each target against the machine it is running on and executes
+locally when they match, so `hladmin status @all` produces the same table from
+any host in the fleet. The machine you are on needs no SSH access to itself.
+
+`hladmin resolve` reports which machine hladmin thinks it is and warns when that
+name matches nothing in your config — worth checking first if a host is
+unexpectedly going over SSH:
+
+```
+Config: /home/you/.config/hladmin/hosts
+Self: desktop1 (hostname)
+
+Groups:
+  @servers: server1, server2, server3
+  @all: server1, server2, server3, desktop1 (self), laptop1
+```
+
+**Identity detection.** The name comes from the system hostname, lowercased and
+shortened to its first label, so a Mac reporting `laptop1.local` still matches a
+`laptop1` entry. Override it with `HLADMIN_SELF=<name>`; set `HLADMIN_SELF=` to
+the empty string to disable detection and send every host over SSH. A
+user-qualified target such as `root@server1` is always remote, even on server1 —
+running it locally would run as you instead.
+
+**Migrating an old config.** If a group still lists both `localhost` and the
+machine's real hostname, the two collapse into a single entry rather than
+executing twice, and `hladmin resolve` says so. Dropping the `localhost` entry is
+what makes the file shareable.
+
 **Using Host Groups:**
 
 ```bash
@@ -290,7 +326,7 @@ hladmin status @servers desktop1 laptop1
 
 Each managed host must have:
 
-1. **SSH Access**: Password-less SSH key authentication configured
+1. **SSH Access**: Password-less SSH key authentication configured (not needed for the machine you run hladmin from — it executes locally)
 2. **Nix Configuration**: `$HOME/nix-config` directory with:
    - Git repository with your NixOS/nix-darwin configuration
    - Executable `rebuild.sh` script

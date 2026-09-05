@@ -16,7 +16,7 @@
 
           src = ./.;
 
-          cargoHash = "sha256-6p12Qh74JYst+9mdHCU52LupN6yIEElyNDg4hCqeovk=";
+          cargoHash = "sha256-n5YI3N/UTouuZQDYjQE4evWZWhz79LxPtBtY95FEVO4=";
 
           meta = with pkgs.lib; {
             description = "Homelab administration tool";

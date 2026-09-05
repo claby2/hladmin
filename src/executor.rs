@@ -1,3 +1,4 @@
+use crate::hostid;
 use anyhow::{Result, bail};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
@@ -25,7 +26,7 @@ pub fn results_error(results: &[ExecResult]) -> Result<()> {
 }
 
 fn create_command(hostname: &str, command: &str, interactive: bool) -> Command {
-    if hostname == "localhost" {
+    if hostid::is_self(hostname) {
         let mut cmd = Command::new("sh");
         cmd.arg("-c").arg(command);
         cmd
@@ -40,7 +41,7 @@ fn create_command(hostname: &str, command: &str, interactive: bool) -> Command {
 }
 
 /// Executes command on a single host, capturing its output. Uses a local `sh`
-/// shell for localhost and SSH for remote hosts.
+/// shell when the host is this machine, and SSH otherwise.
 pub fn run_on_host(hostname: &str, command: &str) -> ExecResult {
     let start = Instant::now();
     let output = create_command(hostname, command, false)

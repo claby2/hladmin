@@ -2,6 +2,7 @@ mod cli;
 mod commands;
 mod config;
 mod executor;
+mod hostid;
 mod ui;
 
 use clap::Parser;

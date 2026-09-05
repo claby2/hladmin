@@ -1,5 +1,6 @@
 use crate::commands::{resolve_hosts, stream_command};
 use crate::executor::{self, ExecResult};
+use crate::hostid;
 use crate::ui::styles;
 use anyhow::{Result, bail};
 use std::io::{BufRead, IsTerminal, Write};
@@ -64,11 +65,14 @@ pub fn run(yes: bool, hosts: &[String]) -> Result<()> {
     let hostnames = resolve_hosts(hosts)?;
 
     let (local, remote): (Vec<String>, Vec<String>) =
-        hostnames.into_iter().partition(|h| h == "localhost");
+        hostnames.into_iter().partition(|h| hostid::is_self(h));
     if !local.is_empty() {
         println!(
             "{}",
-            styles::info().apply_to("Skipping localhost: reset would discard local work")
+            styles::info().apply_to(format!(
+                "Skipping {}: reset would discard local work",
+                local.join(", ")
+            ))
         );
     }
     if remote.is_empty() {

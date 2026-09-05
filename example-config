@@ -1,5 +1,14 @@
 # Sample hladmin host configuration
 # Place this file at: $XDG_CONFIG_HOME/hladmin/hosts or ~/.config/hladmin/hosts
+#
+# This file is meant to be BYTE-IDENTICAL on every machine in the fleet — check
+# it into your nix-config and deploy the same copy everywhere. Name every host
+# by its real hostname; hladmin detects which machine it is running on and
+# executes there locally instead of over SSH, so there is no `localhost` entry
+# and no per-machine variant of this file.
+#
+# Override the detected identity with HLADMIN_SELF=<name> (set it to the empty
+# string to disable detection entirely and send every host over SSH).
 
 # Define host groups
 group servers server1 server2 server3
@@ -14,3 +23,4 @@ default servers
 # hladmin exec @desktops -- uptime # Execute command on desktop hosts
 # hladmin status                   # Use default group (servers)
 # hladmin rebuild @all             # Rebuild all hosts
+# hladmin resolve                  # Show which machine hladmin thinks it is

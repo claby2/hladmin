@@ -1,3 +1,4 @@
+use crate::hostid;
 use anyhow::{Result, bail};
 use indexmap::IndexMap;
 use std::collections::HashSet;
@@ -105,6 +106,24 @@ fn parse_config(contents: &str) -> Result<HostConfig> {
     Ok(config)
 }
 
+/// Flattens `hosts` into a deduplicated list, keeping first-occurrence order so
+/// output blocks and table rows appear in the order the user listed hosts.
+///
+/// Deduplication keys on [`hostid::host_key`] rather than the raw string, so
+/// every spelling of this machine — `localhost` and its real hostname — collapses
+/// to a single entry. Without that, a half-migrated config listing both would run
+/// two concurrent `git pull`s or rebuilds against the same `$HOME/nix-config`.
+fn dedup_hosts<'a>(hosts: impl IntoIterator<Item = &'a String>) -> Vec<String> {
+    let mut resolved = Vec::new();
+    let mut seen = HashSet::new();
+    for host in hosts {
+        if seen.insert(hostid::host_key(host)) {
+            resolved.push(host.clone());
+        }
+    }
+    resolved
+}
+
 impl HostConfig {
     /// Resolves host arguments (which may include @group syntax) into a flat,
     /// deduplicated list of hostnames. Empty args fall back to the default group
@@ -114,17 +133,12 @@ impl HostConfig {
             if let Some(default) = &self.default_group
                 && let Some(hosts) = self.groups.get(default)
             {
-                return Ok(hosts.clone());
+                return Ok(dedup_hosts(hosts));
             }
             return Ok(Vec::new());
         }
 
-        // The Vec keeps first-occurrence order — output blocks and table rows
-        // appear in the order the user listed hosts — while the HashSet makes
-        // the dedup check O(1).
-        let mut resolved = Vec::new();
-        let mut seen = HashSet::new();
-
+        let mut expanded: Vec<&String> = Vec::new();
         for arg in args {
             if let Some(group_name) = arg.strip_prefix('@') {
                 if group_name.is_empty() {
@@ -133,17 +147,13 @@ impl HostConfig {
                 let Some(hosts) = self.groups.get(group_name) else {
                     bail!("unknown group: {group_name}");
                 };
-                for host in hosts {
-                    if seen.insert(host.clone()) {
-                        resolved.push(host.clone());
-                    }
-                }
-            } else if seen.insert(arg.clone()) {
-                resolved.push(arg.clone());
+                expanded.extend(hosts);
+            } else {
+                expanded.push(arg);
             }
         }
 
-        Ok(resolved)
+        Ok(dedup_hosts(expanded))
     }
 }
 
@@ -249,5 +259,22 @@ mod tests {
         let cfg = parse_config("group servers a\n").unwrap();
         let err = cfg.resolve_hosts(&strs(&["@"])).unwrap_err();
         assert_eq!(err.to_string(), "empty group name: @");
+    }
+
+    #[test]
+    fn dedups_every_spelling_of_this_machine() {
+        // A half-migrated config listing the machine twice must not execute
+        // twice against the same nix-config.
+        let cfg = parse_config("group all localhost 127.0.0.1 a\n").unwrap();
+        assert_eq!(
+            cfg.resolve_hosts(&strs(&["@all"])).unwrap(),
+            strs(&["localhost", "a"])
+        );
+    }
+
+    #[test]
+    fn dedups_default_group_too() {
+        let cfg = parse_config("group all localhost ::1 a\ndefault all\n").unwrap();
+        assert_eq!(cfg.resolve_hosts(&[]).unwrap(), strs(&["localhost", "a"]));
     }
 }
